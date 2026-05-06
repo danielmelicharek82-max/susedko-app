@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "329689613080",
+    "project_id": "drone-guard-bdeaf",
+    "storage_bucket": "drone-guard-bdeaf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:329689613080:android:a93743cefd6a65dae7146d",
+        "android_client_info": {
+          "package_name": "com.susedko.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "329689613080-36sos6pj48b60nbbor4vkisfoepfneun.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.susedko.app",
+            "certificate_hash": "cd2427596ee60294a123e87bb2fc9b4b7ad5d882"
+          }
+        },
+        {
+          "client_id": "329689613080-bc2pnk6ek1nhetl4oq5b3or60esdiarq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.susedko.app",
+            "certificate_hash": "7fed41e4213fed16287c433c17ee969ad432a24d"
+          }
+        },
+        {
+          "client_id": "329689613080-1ci4pl6477aa7refi7crhg8mgtqv6ua9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlTUuPn8_CSu3Pmmfkl6UpaYDxbSEQbpE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "329689613080-1ci4pl6477aa7refi7crhg8mgtqv6ua9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "329689613080-d06di9e3jp2unbj0hhvk3f8pq01kaskq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.droneguard.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

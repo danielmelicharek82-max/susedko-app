@@ -1,0 +1,40 @@
+# ===== SECRETS (KRITICKÉ) =====
+functions/.env
+*.env
+.env
+.env.local
+
+# ===== NODE =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== FLUTTER =====
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# ===== ANDROID =====
+android/.gradle/
+android/app/build/
+
+# ===== IOS =====
+ios/Pods/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+Pods/
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+
+# ===== SYSTEM =====
+.DS_Store
+Thumbs.db
+
+# ===== LOCAL CONFIG =====
+*.local

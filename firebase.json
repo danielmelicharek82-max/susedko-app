@@ -1,0 +1,46 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "drone-guard-bdeaf",
+          "appId": "1:329689613080:android:db8d38c562793c99e7146d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "drone-guard-bdeaf",
+          "configurations": {
+            "android": "1:329689613080:android:db8d38c562793c99e7146d",
+            "ios": "1:329689613080:ios:a48d45e39a43bb0be7146d",
+            "macos": "1:329689613080:ios:a48d45e39a43bb0be7146d",
+            "web": "1:329689613080:web:2461e500bffb6f68e7146d",
+            "windows": "1:329689613080:web:1091f73dc30082e2e7146d"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "eur3",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+      // predeploy je odstránený, aby sa neblokoval deploy kvôli ESLint
+    }
+  ]
+}

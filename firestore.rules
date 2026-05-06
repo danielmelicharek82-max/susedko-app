@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isLoggedIn()  { return request.auth != null; }
+    function isAdmin()     { return getRole() == 'admin'; }
+    function isArtist()    { return getRole() == 'artist'; }
+    function isCustomer()  { return getRole() == 'customer'; }
+    function isOwner(uid)  { return request.auth.uid == uid; }
+    function isArtistOwner(artistId) {
+      return request.auth.uid == artistId && isArtist();
+    }
+
+    match /users/{userId} {
+      allow read:   if isLoggedIn();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /artists/{artistId} {
+      allow read:   if isLoggedIn();
+      allow create: if isArtistOwner(artistId) || isAdmin();
+      allow update: if isArtistOwner(artistId) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /portfolio/{itemId} {
+        allow read:   if isLoggedIn();
+        allow create: if isArtistOwner(artistId) || isAdmin();
+        allow update: if isArtistOwner(artistId) || isAdmin();
+        allow delete: if isArtistOwner(artistId) || isAdmin();
+      }
+
+      match /availability/{docId} {
+        allow read:  if isLoggedIn();
+        allow write: if isArtistOwner(artistId) || isAdmin();
+      }
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isLoggedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.artistId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isCustomer() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update: if isLoggedIn() && (
+        resource.data.artistId == request.auth.uid ||
+        resource.data.customerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /tattoo_requests/{requestId} {
+      allow read: if isLoggedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.artistId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isCustomer() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update: if isLoggedIn() && (
+        resource.data.artistId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /conversations/{conversationId} {
+      allow read: if isLoggedIn() &&
+        request.auth.uid in resource.data.participants;
+      allow create: if isLoggedIn() &&
+        request.auth.uid in request.resource.data.participants;
+      allow update: if isLoggedIn() &&
+        request.auth.uid in resource.data.participants;
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isLoggedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isLoggedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+        allow update: if isLoggedIn() &&
+          resource.data.senderId == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /reviews/{reviewId} {
+      allow read:   if isLoggedIn();
+      allow create: if isCustomer() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update: if isLoggedIn() &&
+        resource.data.customerId == request.auth.uid;
+      allow delete: if isAdmin() ||
+        resource.data.customerId == request.auth.uid;
+    }
+
+    match /admin/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /stats/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+  }
+}

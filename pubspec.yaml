@@ -1,0 +1,93 @@
+name: homie
+description: "homie — find your perfect craftsman."
+
+publish_to: 'none'
+
+version: 1.0.0+29
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # ─── Firebase ──────────────────────────────────────────
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.3.7
+  cloud_firestore: ^5.4.2
+  firebase_storage: ^12.0.2
+  cloud_functions: ^5.6.2
+  firebase_messaging: ^15.2.10
+  firebase_app_check: ^0.3.2
+
+  # ─── Notifikácie ───────────────────────────────────────
+  flutter_local_notifications: ^19.5.0
+
+  # ─── Obrázky ───────────────────────────────────────────
+  image_picker: ^1.0.0
+  flutter_image_compress: ^2.1.0
+  path_provider: ^2.0.14
+  cached_network_image: ^3.2.3
+
+  # ─── Lokalizácia ───────────────────────────────────────
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  easy_localization: ^3.0.7
+  shared_preferences: ^2.3.2
+
+  # ─── Zdieľanie ─────────────────────────────────────────
+  share_plus: ^12.0.1
+  url_launcher: ^6.1.10
+
+  # ─── State management ──────────────────────────────────
+  provider: ^6.0.7
+
+  # ─── Auth ──────────────────────────────────────────────
+  google_sign_in: ^6.1.0
+  flutter_facebook_auth: ^7.1.5
+
+  # ─── Platby ────────────────────────────────────────────
+  flutter_stripe: 11.0.0
+
+  # ─── Ikony ─────────────────────────────────────────────
+  font_awesome_flutter: ^10.7.0
+
+  # ─── Geolokácia ────────────────────────────────────────
+  geolocator: ^11.0.0
+
+  # ─── Mapa remeselníkov v okolí ─────────────────────────
+  google_maps_flutter: ^2.5.0
+
+  # ─── Reverse geocoding ─────────────────────────────────
+  geocoding: ^3.0.0
+
+  # ─── Kalendár — výber termínov ─────────────────────────
+  table_calendar: ^3.1.0
+  flutter_launcher_icons: ^0.14.4
+
+  # ─── Async utilities (StreamZip pre chunked Firestore queries) ─
+  async: ^2.11.0
+
+  # ─── QR kód (Stripe Payment Link) ────────────────────────────
+  qr_flutter: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/logo.png
+    - assets/translations/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
