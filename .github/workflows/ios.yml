@@ -1,4 +1,4 @@
-name: iOS TestFlight Build
+name: iOS Build Pipeline
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Flutter
@@ -22,14 +22,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Clean project
+        run: flutter clean
+
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
           cd ..
 
-      - name: Build IPA
-        run: flutter build ipa --release
-
-      - name: Upload to TestFlight (placeholder step)
-        run: echo "Next step: fastlane or altool upload"
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
