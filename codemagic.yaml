@@ -12,13 +12,15 @@ workflows:
     scripts:
       - name: Flutter pub get
         script: flutter pub get
+      - name: List schemes
+        script: |
+          xcodebuild -workspace ios/Runner.xcworkspace -list
       - name: Install CocoaPods
         script: |
           cd ios && pod install
       - name: Flutter build IPA
         script: |
-          flutter build ipa --release \
-            --no-tree-shake-icons
+          flutter build ipa --release
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
