@@ -416,8 +416,8 @@
 			};
 			name = Release;
 		};
-		331C808A294A63A400263BE5 /* Profile */ = {
-			isa = PBXBuildConfiguration;
+331C808A294A63A400263BE5 /* Profile */ = {
+    isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
