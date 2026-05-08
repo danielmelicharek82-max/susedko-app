@@ -6,21 +6,14 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.melicharek.susedko
     scripts:
       - name: Flutter pub get
         script: flutter pub get
-      - name: List schemes
-        script: |
-          xcodebuild -workspace ios/Runner.xcworkspace -list
       - name: Install CocoaPods
         script: |
           cd ios && pod install
-      - name: Flutter build IPA
+      - name: Flutter build iOS no-codesign
         script: |
-          flutter build ipa --release
+          flutter build ios --release --no-codesign
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
+      - build/ios/iphoneos/Runner.app
