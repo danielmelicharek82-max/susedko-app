@@ -1,0 +1,7 @@
+[33mcommit 3f774b51dc627cbd5b5b3f528f8fb26afe2729eb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Daniel Melicharek <tvoj@email.com>
+Date:   Fri May 8 14:48:08 2026 +0200
+
+    Fix: remove customLLDBInitFile from scheme
+
+ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme
