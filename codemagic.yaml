@@ -17,6 +17,8 @@ workflows:
           cd ios && pod install
       - name: Flutter build IPA
         script: |
-          flutter build ipa --release
+          flutter build ipa --release \
+            --no-tree-shake-icons
     artifacts:
       - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
