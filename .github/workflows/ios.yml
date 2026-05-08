@@ -20,4 +20,10 @@ jobs:
 
       - run: flutter clean
 
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
       - run: flutter build ios --release --no-codesign
