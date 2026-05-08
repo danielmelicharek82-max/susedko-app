@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>329689613080-1aqk026ifalvhre4gk6qfgsahngpf1uq.apps.googleusercontent.com</string>
+	<string>329689613080-uhokeseacqe2uleq01ocb11gjukcg41n.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.329689613080-1aqk026ifalvhre4gk6qfgsahngpf1uq</string>
+	<string>com.googleusercontent.apps.329689613080-uhokeseacqe2uleq01ocb11gjukcg41n</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>329689613080-1c10k7vvk5e0i0ong95gusis7k21rhao.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.susedko.app</string>
+	<string>com.melicharek.susedko</string>
 	<key>PROJECT_ID</key>
 	<string>drone-guard-bdeaf</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:329689613080:ios:ce538921eda91c46e7146d</string>
+	<string>1:329689613080:ios:3de98939f0a9b05fe7146d</string>
 </dict>
 </plist>
