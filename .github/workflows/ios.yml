@@ -53,15 +53,16 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
       - name: Build IPA
-        run: |
-          flutter build ipa --release \
-            --export-options-plist=ios/ExportOptions.plist
+        run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
       - name: Debug find IPA
         run: |
+          echo "Searching for IPA..."
           find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
-          ls -la build/ios/ 2>/dev/null || echo "No build/ios"
-          ls -la build/ios/ipa/ 2>/dev/null || echo "No ipa dir"
+          echo "build/ios contents:"
+          ls -la build/ios/ 2>/dev/null || echo "No build/ios dir"
+          ls -la build/ios/ipa/ 2>/dev/null || echo "No build/ios/ipa dir"
+          ls -la build/ios/archive/ 2>/dev/null || echo "No archive dir"
 
       - name: Upload to TestFlight
         env:
@@ -71,8 +72,12 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
-          IPA_PATH=$(find . -name "*.ipa" | head -1)
+          IPA_PATH=$(find build/ios/archive -name "*.ipa" 2>/dev/null | head -1)
           echo "Found IPA: $IPA_PATH"
+          if [ -z "$IPA_PATH" ]; then
+          echo "IPA not found, listing archive:"
+          find build/ios/archive -type f 2>/dev/null
+          fi
           xcrun altool --upload-app --type ios --file "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
 
       - name: Clean up
