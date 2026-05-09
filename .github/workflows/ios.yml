@@ -57,7 +57,7 @@ jobs:
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist
 
-- name: Debug find IPA
+      - name: Debug find IPA
         run: |
           find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
           ls -la build/ios/ 2>/dev/null || echo "No build/ios"
