@@ -15,7 +15,7 @@
     <key>provisioningProfiles</key>
     <dict>
         <key>com.melicharek.susedko</key>
-        <string>Susedko ios_app_store 1778061872</string>
+        <string>Susedko ios_app_store</string>
     </dict>
 </dict>
 </plist>
