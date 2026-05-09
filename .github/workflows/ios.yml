@@ -53,7 +53,13 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
       - name: Build IPA
-        run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+        run: |
+          flutter build ios --release
+          xcodebuild -exportArchive \
+          -archivePath build/ios/archive/Runner.xcarchive \
+          -exportPath build/ios/ipa \
+          -exportOptionsPlist ios/ExportOptions.plist \
+          -allowProvisioningUpdates
 
       - name: Debug find IPA
         run: |
@@ -72,7 +78,7 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
-          IPA_PATH=$(find build/ios/archive -name "*.ipa" 2>/dev/null | head -1)
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           echo "Found IPA: $IPA_PATH"
           if [ -z "$IPA_PATH" ]; then
           echo "IPA not found, listing archive:"
