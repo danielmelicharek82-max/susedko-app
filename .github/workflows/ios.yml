@@ -52,23 +52,23 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
-      - name: Build IPA
+      - name: Build and Archive
         run: |
-          flutter build ios --release
-          xcodebuild -exportArchive \
-          -archivePath build/ios/archive/Runner.xcarchive \
-          -exportPath build/ios/ipa \
-          -exportOptionsPlist ios/ExportOptions.plist \
-          -allowProvisioningUpdates
+          flutter pub get
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            -sdk iphoneos \
+            archive
 
-      - name: Debug find IPA
+      - name: Export IPA
         run: |
-          echo "Searching for IPA..."
-          find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
-          echo "build/ios contents:"
-          ls -la build/ios/ 2>/dev/null || echo "No build/ios dir"
-          ls -la build/ios/ipa/ 2>/dev/null || echo "No build/ios/ipa dir"
-          ls -la build/ios/archive/ 2>/dev/null || echo "No archive dir"
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            -exportPath $RUNNER_TEMP/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist
 
       - name: Upload to TestFlight
         env:
@@ -78,13 +78,11 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
-          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+          IPA_PATH=$(find $RUNNER_TEMP/ipa -name "*.ipa" | head -1)
           echo "Found IPA: $IPA_PATH"
-          if [ -z "$IPA_PATH" ]; then
-          echo "IPA not found, listing archive:"
-          find build/ios/archive -type f 2>/dev/null
-          fi
-          xcrun altool --upload-app --type ios --file "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          xcrun altool --upload-app --type ios --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
 
       - name: Clean up
         if: always()
