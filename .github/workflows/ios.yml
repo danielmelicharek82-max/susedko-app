@@ -57,7 +57,13 @@ jobs:
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist
 
-      - name: Find and upload IPA to TestFlight
+- name: Debug find IPA
+        run: |
+          find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
+          ls -la build/ios/ 2>/dev/null || echo "No build/ios"
+          ls -la build/ios/ipa/ 2>/dev/null || echo "No ipa dir"
+
+      - name: Upload to TestFlight
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -65,15 +71,9 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
-
           IPA_PATH=$(find . -name "*.ipa" | head -1)
           echo "Found IPA: $IPA_PATH"
-
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$IPA_PATH" \
-            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          xcrun altool --upload-app --type ios --file "$IPA_PATH" --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
 
       - name: Clean up
         if: always()
