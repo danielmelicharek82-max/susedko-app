@@ -36,7 +36,6 @@
     <key>CFBundleVersion</key>
     <string>$(FLUTTER_BUILD_NUMBER)</string>
 
-    <!-- ✅ iPhone only (iPad disabled) -->
     <key>UIDeviceFamily</key>
     <array>
         <integer>1</integer>
@@ -45,7 +44,6 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
-    <!-- PERMISSIONS -->
     <key>NSCameraUsageDescription</key>
     <string>Aplikácia používa kameru na pridávanie fotografií k zákazkám.</string>
 
@@ -55,11 +53,22 @@
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Aplikácia môže používať polohu aj na pozadí pre lepšie služby.</string>
 
-    <!-- Scene Manifest (Flutter kompatibilný) -->
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
         <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>flutter</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
     </dict>
 
     <key>UIApplicationSupportsIndirectInputEvents</key>
@@ -68,7 +77,6 @@
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
 
-    <!-- ✅ REQUIRED Apple orientations fix -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
