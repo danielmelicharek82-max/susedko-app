@@ -180,8 +180,8 @@ try {
 
 // ✅ PRIDAJ TOTO
 await FirebaseAppCheck.instance.activate(
-  androidProvider: AndroidProvider.debug, // vývoj
-  // androidProvider: AndroidProvider.playIntegrity, // produkcia
+  androidProvider: AndroidProvider.debug,
+  appleProvider: AppleProvider.debug,
 );
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -220,7 +220,7 @@ await FirebaseAppCheck.instance.activate(
 
   Stripe.publishableKey =
       'pk_test_51T4hLc7rtEYv7RoYZsJradFs3GS7K5iqnbua9eDquWNB0SWi5lBBLIY1H7m7ovNJqheROrA3iHuyn6KfhgZikSvf003veJdyZT';
-  await Stripe.instance.applySettings();
+  // await Stripe.instance.applySettings();//
 
   final systemLocale =
       WidgetsBinding.instance.platformDispatcher.locale;
