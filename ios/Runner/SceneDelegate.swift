@@ -8,8 +8,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                willConnectTo session: UISceneSession,
                options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
+
+        let appDelegate = UIApplication.shared.delegate as! AppDelegate
+        let flutterEngine = appDelegate.flutterEngine
+        let flutterVC = FlutterViewController(engine: flutterEngine, nibName: nil, bundle: nil)
+
         window = UIWindow(windowScene: windowScene)
-        let flutterVC = FlutterViewController()
         window?.rootViewController = flutterVC
         window?.makeKeyAndVisible()
     }
