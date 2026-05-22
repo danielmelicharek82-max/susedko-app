@@ -30,7 +30,7 @@ jobs:
       - name: Install CocoaPods
         run: |
           cd ios
-          pod install
+          pod install --clean-install
           cd ..
 
       - name: Install Apple Certificate and Provisioning Profile
@@ -68,6 +68,7 @@ jobs:
           flutter pub get
           cd ios
           xcodebuild -workspace Runner.xcworkspace \
+            -disableAutomaticPackageResolution \
             -scheme Runner \
             -configuration Release \
             -archivePath $RUNNER_TEMP/Runner.xcarchive \
