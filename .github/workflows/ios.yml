@@ -74,6 +74,7 @@ jobs:
             -archivePath $RUNNER_TEMP/Runner.xcarchive \
             -sdk iphoneos \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
+            -allowProvisioningUpdates \
             archive
 
       - name: Export IPA
