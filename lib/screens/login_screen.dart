@@ -46,7 +46,10 @@ class _LoginScreenState extends State<LoginScreen>
     super.initState();
 
     _fadeCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1000));
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+      value: 1.0,
+    );
 
     _floatCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 3200))

@@ -5,15 +5,6 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -26,15 +17,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
@@ -58,5 +43,15 @@ class DefaultFirebaseOptions {
     messagingSenderId: '178095889465',
     projectId: 'myknife-58a1a',
     storageBucket: 'myknife-58a1a.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAeGAjTb4EdavVOXYzf_I1ISs5e1N-1qR0',
+    appId: '1:329689613080:ios:3de98939f0a9b05fe7146d',
+    messagingSenderId: '329689613080',
+    projectId: 'drone-guard-bdeaf',
+    storageBucket: 'drone-guard-bdeaf.firebasestorage.app',
+    iosClientId: '329689613080-uhokeseacqe2uleq01ocb11gjukcg41n.apps.googleusercontent.com',
+    iosBundleId: 'com.melicharek.susedko',
   );
 }

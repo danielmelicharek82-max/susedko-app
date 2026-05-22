@@ -1,6 +1,6 @@
 import Flutter
 import UIKit
 
-class SceneDelegate: FlutterSceneDelegate {
-
-}
+/// Obj-C runtime musí vidieť triedu pod menom „SceneDelegate“ (Info.plist).
+@objc(SceneDelegate)
+class SceneDelegate: FlutterSceneDelegate {}

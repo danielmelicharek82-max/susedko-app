@@ -37,7 +37,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
     return Scaffold(
       backgroundColor: _kBg,
-      body: IndexedStack(index: _currentIndex, children: _screens),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: List.generate(_screens.length, (i) {
+          if (i != _currentIndex) return const SizedBox.shrink();
+          return _screens[i];
+        }),
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,

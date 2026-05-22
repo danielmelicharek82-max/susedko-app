@@ -3,7 +3,7 @@ description: "homie — find your perfect craftsman."
 
 publish_to: 'none'
 
-version: 1.0.0+320
+version: 1.0.0+400
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -48,7 +48,7 @@ dependencies:
 
   # ─── Auth ──────────────────────────────────────────────
   google_sign_in: ^6.1.0
-  flutter_facebook_auth: ^7.1.5
+  flutter_facebook_auth: ^6.0.4
 
   # ─── Platby ────────────────────────────────────────────
   flutter_stripe: 11.0.0
