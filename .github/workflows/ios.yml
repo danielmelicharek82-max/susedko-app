@@ -74,7 +74,10 @@ jobs:
             -archivePath $RUNNER_TEMP/Runner.xcarchive \
             -sdk iphoneos \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM=SQ2VV7TA67 \
             archive
 
       - name: Export IPA
