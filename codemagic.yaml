@@ -27,7 +27,8 @@ workflows:
             PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            archive
+            OTHER_CODE_SIGN_FLAGS="--keychain login.keychain" \
+            archive 2>&1 | grep -v "does not support provisioning profiles" | grep -v "Set the provisioning profile value"
     artifacts:
       - $CM_BUILD_DIR/Runner.xcarchive
     publishing:
