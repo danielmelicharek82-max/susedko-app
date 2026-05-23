@@ -1,7 +1,6 @@
 name: iOS Build and Upload to TestFlight
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
@@ -57,9 +56,6 @@ jobs:
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-
-      - name: Clean SPM Artifacts Cache
-        run: rm -rf /Users/runner/Library/Caches/org.swift.swiftpm/artifacts
 
       - name: Build and Archive
         run: |
