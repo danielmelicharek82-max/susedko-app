@@ -30,7 +30,7 @@ workflows:
             archive 2>&1 | grep -v "does not support provisioning profiles" | grep -v "Set the provisioning profile value"
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportOptionsPlist ../ios/ExportOptions.plist \
             -exportPath $CM_BUILD_DIR/ipa
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
