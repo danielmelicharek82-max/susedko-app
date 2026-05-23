@@ -46,4 +46,4 @@ android/app/release
 
 app.*.symbols
 app.*.map.json
-ios/Pods/
+
