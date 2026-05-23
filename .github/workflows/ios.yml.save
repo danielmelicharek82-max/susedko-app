@@ -1,8 +1,13 @@
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 name: iOS Build and Upload to TestFlight
 
 on:
-  workflow_dispatch:
   push:
+  workflow_dispatch:
     branches:
       - main
 

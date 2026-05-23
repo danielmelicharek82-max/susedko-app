@@ -1,10 +1,10 @@
 #!/bin/sh
 # This is a generated file; do not edit or check into version control.
 export "FLUTTER_ROOT=/Users/macair/flutter"
-export "FLUTTER_APPLICATION_PATH=/Users/macair/Documents/Homie3"
-export "FLUTTER_FRAMEWORK_SWIFT_PACKAGE_PATH=/Users/macair/Documents/Homie3/ios/Flutter/ephemeral/Packages/.packages/FlutterFramework"
+export "FLUTTER_APPLICATION_PATH=/Users/macair/Documents/Homie"
+export "FLUTTER_FRAMEWORK_SWIFT_PACKAGE_PATH=/Users/macair/Documents/Homie/ios/Flutter/ephemeral/Packages/.packages/FlutterFramework"
 export "COCOAPODS_PARALLEL_CODE_SIGN=true"
-export "FLUTTER_TARGET=/Users/macair/Documents/Homie3/lib/main.dart"
+export "FLUTTER_TARGET=/Users/macair/Documents/Homie/lib/main.dart"
 export "FLUTTER_BUILD_DIR=build"
 export "FLUTTER_BUILD_NAME=1.0.0"
 export "FLUTTER_BUILD_NUMBER=400"
@@ -12,4 +12,4 @@ export "DART_DEFINES=RkxVVFRFUl9WRVJTSU9OPTMuNDQuMA==,RkxVVFRFUl9DSEFOTkVMPXN0YW
 export "DART_OBFUSCATION=false"
 export "TRACK_WIDGET_CREATION=true"
 export "TREE_SHAKE_ICONS=false"
-export "PACKAGE_CONFIG=/Users/macair/Documents/Homie3/.dart_tool/package_config.json"
+export "PACKAGE_CONFIG=/Users/macair/Documents/Homie/.dart_tool/package_config.json"
