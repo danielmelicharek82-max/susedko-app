@@ -6,8 +6,6 @@ workflows:
       flutter: 3.44.0
       xcode: 16.0
       cocoapods: default
-      vars:
-        BUNDLE_ID: com.melicharek.susedko
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -19,9 +17,7 @@ workflows:
       - name: Build iOS
         script: |
           flutter build ios --release --no-codesign
-
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > /tmp/AuthKey.p8
-
           cd ios
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
