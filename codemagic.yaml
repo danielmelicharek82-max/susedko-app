@@ -19,6 +19,10 @@ workflows:
       - name: Build iOS
         script: |
           flutter build ios --release --no-codesign
+
+          # Uloz API key do suboru
+          echo $APP_STORE_CONNECT_PRIVATE_KEY > /tmp/AuthKey.p8
+
           cd ios
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
@@ -26,7 +30,7 @@ workflows:
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
             -allowProvisioningUpdates \
-            -authenticationKeyPath $APP_STORE_CONNECT_PRIVATE_KEY \
+            -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
             -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID \
             CODE_SIGN_STYLE=Automatic \
