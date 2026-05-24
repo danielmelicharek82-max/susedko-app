@@ -25,9 +25,11 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath $APP_STORE_CONNECT_PRIVATE_KEY \
+            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
+            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
             archive
           xcodebuild -exportArchive \

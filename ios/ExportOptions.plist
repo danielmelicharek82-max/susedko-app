@@ -11,13 +11,8 @@
     <key>uploadSymbols</key>
     <true/>
     <key>signingStyle</key>
-    <string>manual</string>
+    <string>automatic</string>
     <key>stripSwiftSymbols</key>
     <true/>
-    <key>provisioningProfiles</key>
-    <dict>
-        <key>com.melicharek.susedko</key>
-        <string>Susedko ios_app_store</string>
-    </dict>
 </dict>
 </plist>
