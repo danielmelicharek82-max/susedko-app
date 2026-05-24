@@ -6,9 +6,8 @@ workflows:
       flutter: 3.44.0
       xcode: 16.0
       cocoapods: default
-    ios_signing:
-      distribution_type: app_store
-      bundle_identifier: com.melicharek.susedko
+      vars:
+        BUNDLE_ID: com.melicharek.susedko
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
