@@ -6,6 +6,9 @@ workflows:
       flutter: 3.44.0
       xcode: 16.0
       cocoapods: default
+    ios_signing:
+      distribution_type: app_store
+      bundle_identifier: com.melicharek.susedko
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -21,19 +24,19 @@ workflows:
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
-            -archivePath /Users/builder/clone/Runner.xcarchive \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
             CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            archive 2>&1 | grep -v "does not support provisioning profiles" | grep -v "Set the provisioning profile value"
+            archive
           xcodebuild -exportArchive \
-            -archivePath /Users/builder/clone/Runner.xcarchive \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -exportOptionsPlist ../ios/ExportOptions.plist \
-            -exportPath /Users/builder/clone/ipa
+            -exportPath $CM_BUILD_DIR/ipa
     artifacts:
-      - /Users/builder/clone/ipa/*.ipa
+      - $CM_BUILD_DIR/ipa/*.ipa
     publishing:
       app_store_connect:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
