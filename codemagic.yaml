@@ -13,6 +13,7 @@ workflows:
         script: |
           cd ios
           pod install --clean-install
+          find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
       - name: Build iOS
         script: |
