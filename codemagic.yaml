@@ -39,11 +39,13 @@ workflows:
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
+      - name: Upload to TestFlight
+        script: |
+          app-store-connect publish \
+            --path $CM_BUILD_DIR/ipa/susedko.ipa \
+            --key-id "S6JD8KBSNV" \
+            --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            --private-key @file:/tmp/AuthKey.p8 \
+            --testflight
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
-    publishing:
-      app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: true
