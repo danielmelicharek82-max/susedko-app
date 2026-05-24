@@ -21,7 +21,7 @@ workflows:
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -archivePath /Users/builder/clone/Runner.xcarchive \
             -sdk iphoneos \
             CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
@@ -29,11 +29,11 @@ workflows:
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
             archive 2>&1 | grep -v "does not support provisioning profiles" | grep -v "Set the provisioning profile value"
           xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -archivePath /Users/builder/clone/Runner.xcarchive \
             -exportOptionsPlist ../ios/ExportOptions.plist \
-            -exportPath $CM_BUILD_DIR/ipa
+            -exportPath /Users/builder/clone/ipa
     artifacts:
-      - $CM_BUILD_DIR/ipa/*.ipa
+      - /Users/builder/clone/ipa/*.ipa
     publishing:
       app_store_connect:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
