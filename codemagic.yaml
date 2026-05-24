@@ -20,7 +20,6 @@ workflows:
         script: |
           flutter build ios --release --no-codesign
 
-          # Uloz API key do suboru
           echo $APP_STORE_CONNECT_PRIVATE_KEY > /tmp/AuthKey.p8
 
           cd ios
@@ -31,8 +30,8 @@ workflows:
             -sdk iphoneos \
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID $APP_STORE_CONNECT_KEY_IDENTIFIER \
-            -authenticationKeyIssuerID $APP_STORE_CONNECT_ISSUER_ID \
+            -authenticationKeyID "S6JD8KBSNV" \
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
             archive
