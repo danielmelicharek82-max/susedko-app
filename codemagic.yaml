@@ -27,12 +27,21 @@ workflows:
             -k "build" \
             build.keychain
           security find-identity -v -p codesigning build.keychain
+
+      - name: Install Provisioning Profile
+        script: |
+          echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
       - name: Flutter clean
         script: |
           flutter clean
+
       - name: Get Flutter packages
         script: |
           flutter pub get
+
       - name: Clean CocoaPods
         script: |
           cd ios
@@ -42,6 +51,7 @@ workflows:
           pod install --clean-install
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
+
       - name: Build iOS archive
         script: |
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
@@ -53,23 +63,21 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="Susedko ios_app_store" \
-            DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
+            CODE_SIGNING_ALLOWED=NO \
             archive
+
       - name: Export IPA
         script: |
-          cd ios
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
+            -exportOptionsPlist ios/ExportOptions.plist \
             -exportPath $CM_BUILD_DIR/ipa \
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain"
+
       - name: Upload to TestFlight
         script: |
           app-store-connect publish \
@@ -78,5 +86,6 @@ workflows:
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
+
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
