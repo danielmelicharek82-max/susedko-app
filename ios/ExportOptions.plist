@@ -6,13 +6,18 @@
     <string>app-store</string>
     <key>teamID</key>
     <string>SQ2VV7TA67</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.melicharek.susedko</key>
+        <string>Susedko ios_app_store</string>
+    </dict>
+    <key>stripSwiftSymbols</key>
+    <true/>
     <key>uploadBitcode</key>
     <false/>
     <key>uploadSymbols</key>
-    <true/>
-    <key>signingStyle</key>
-    <string>automatic</string>
-    <key>stripSwiftSymbols</key>
     <true/>
 </dict>
 </plist>
