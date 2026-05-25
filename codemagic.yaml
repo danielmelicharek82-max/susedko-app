@@ -1,58 +1,23 @@
-workflows:
-  ios-release:
-    name: iOS Release
-    max_build_duration: 120
-    environment:
-      flutter: 3.44.0
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Pod install
+- name: Upload to TestFlight
         script: |
-          cd ios
-          pod install --clean-install
-          find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
-          cd ..
-      - name: Build iOS
-        script: |
-          flutter build ios --release --no-codesign
-          cp ios/AuthKey.p8 /tmp/AuthKey.p8
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -sdk iphoneos \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            archive
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -exportOptionsPlist ../ios/ExportOptions.plist \
-            -exportPath $CM_BUILD_DIR/ipa \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
-      - name: Upload to TestFlight
-        script: |
-          # Rozbali IPA
           cd $CM_BUILD_DIR/ipa
           unzip -o susedko.ipa -d Payload_dir
 
-          # Re-sign každý framework individuálne
-          for framework in Payload_dir/Payload/Runner.app/Frameworks/*.framework; do
+          # Podpiš každý binárny súbor vo frameworks
+          find Payload_dir/Payload/Runner.app/Frameworks -type f -not -name "*.plist" -not -name "*.nib" | while read binary; do
             codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
               --preserve-metadata=identifier,entitlements \
-              "$framework"
+              "$binary" || true
           done
 
-          # Znova podpiš aj hlavnú app
+          # Podpiš frameworks
+          find Payload_dir/Payload/Runner.app/Frameworks -name "*.framework" | while read fw; do
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+              --preserve-metadata=identifier,entitlements \
+              "$fw" || true
+          done
+
+          # Podpiš hlavnú app
           codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
             --preserve-metadata=identifier,entitlements \
             Payload_dir/Payload/Runner.app
@@ -62,12 +27,9 @@ workflows:
           zip -r ../susedko_final.ipa Payload
           cd ..
 
-          # Upload
           app-store-connect publish \
             --path $CM_BUILD_DIR/ipa/susedko_final.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
-    artifacts:
-      - $CM_BUILD_DIR/ipa/*.ipa
