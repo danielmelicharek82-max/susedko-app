@@ -31,9 +31,6 @@ workflows:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             archive
-          # Re-sign frameworks v xcarchive
-          find $CM_BUILD_DIR/Runner.xcarchive -name "*.framework" -exec codesign --force --sign "Apple Distribution" {} \;
-          find $CM_BUILD_DIR/Runner.xcarchive -name "*.dylib" -exec codesign --force --sign "Apple Distribution" {} \;
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -exportOptionsPlist ../ios/ExportOptions.plist \
@@ -44,8 +41,30 @@ workflows:
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
       - name: Upload to TestFlight
         script: |
+          # Rozbali IPA
+          cd $CM_BUILD_DIR/ipa
+          unzip -o susedko.ipa -d Payload_dir
+
+          # Re-sign každý framework individuálne
+          for framework in Payload_dir/Payload/Runner.app/Frameworks/*.framework; do
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+              --preserve-metadata=identifier,entitlements \
+              "$framework"
+          done
+
+          # Znova podpiš aj hlavnú app
+          codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+            --preserve-metadata=identifier,entitlements \
+            Payload_dir/Payload/Runner.app
+
+          # Zbal späť
+          cd Payload_dir
+          zip -r ../susedko_final.ipa Payload
+          cd ..
+
+          # Upload
           app-store-connect publish \
-            --path $CM_BUILD_DIR/ipa/susedko.ipa \
+            --path $CM_BUILD_DIR/ipa/susedko_final.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
