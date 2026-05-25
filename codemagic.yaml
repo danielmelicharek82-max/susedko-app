@@ -39,10 +39,18 @@ workflows:
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
+          # Re-sign frameworks v IPA
+          cd $CM_BUILD_DIR/ipa
+          unzip -o susedko.ipa -d susedko_unpacked
+          find susedko_unpacked -name "*.framework" -exec codesign --force --sign "Apple Distribution" {} \;
+          find susedko_unpacked -name "*.dylib" -exec codesign --force --sign "Apple Distribution" {} \;
+          cd susedko_unpacked
+          zip -r ../susedko_resigned.ipa Payload
+          cd ..
       - name: Upload to TestFlight
         script: |
           app-store-connect publish \
-            --path $CM_BUILD_DIR/ipa/susedko.ipa \
+            --path $CM_BUILD_DIR/ipa/susedko_resigned.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
