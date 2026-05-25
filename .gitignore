@@ -47,3 +47,4 @@ android/app/release
 app.*.symbols
 app.*.map.json
 
+ios/AuthKey.p8

@@ -2,10 +2,12 @@ workflows:
   ios-release:
     name: iOS Release
     max_build_duration: 120
+
     environment:
       flutter: 3.44.0
       xcode: latest
       cocoapods: default
+
     scripts:
       - name: Install Certificate
         script: |
@@ -13,7 +15,9 @@ workflows:
           security default-keychain -s build.keychain
           security unlock-keychain -p "build" build.keychain
           security set-keychain-settings -t 3600 -l build.keychain
+
           echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+
           security import /tmp/cert.p12 \
             -k build.keychain \
             -P "$CERTIFICATE_PASSWORD" \
@@ -21,22 +25,43 @@ workflows:
             -T /usr/bin/security \
             -f pkcs12 \
             -A
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "build" build.keychain
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "build" \
+            build.keychain
+
           security find-identity -v -p codesigning build.keychain
+
+      - name: Flutter clean
+        script: |
+          flutter clean
+
       - name: Get Flutter packages
-        script: flutter pub get
-      - name: Pod install
+        script: |
+          flutter pub get
+
+      - name: Clean CocoaPods
         script: |
           cd ios
+          rm -rf Pods
+          rm -rf Podfile.lock
+          pod repo update
           pod install --clean-install
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
-      - name: Build iOS
+
+      - name: Build iOS archive
         script: |
-          flutter build ios --release --no-codesign
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
+
+          flutter build ios --release --no-codesign
+
           cd ios
-          xcodebuild -workspace Runner.xcworkspace \
+
+          xcodebuild \
+            -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
@@ -44,37 +69,31 @@ workflows:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
             archive
+
+      - name: Export IPA
+        script: |
+          cd ios
+
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -exportOptionsPlist ../ios/ExportOptions.plist \
+            -exportOptionsPlist ExportOptions.plist \
             -exportPath $CM_BUILD_DIR/ipa \
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
+
       - name: Upload to TestFlight
         script: |
-          cd $CM_BUILD_DIR/ipa
-          unzip -o susedko.ipa -d Payload_dir
-          find Payload_dir/Payload/Runner.app/Frameworks -type f | while read f; do
-            file "$f" | grep -q "Mach-O" && codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$f" || true
-          done
-          find Payload_dir/Payload/Runner.app/Frameworks -name "*.framework" | while read fw; do
-            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$fw" || true
-          done
-          codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
-            Payload_dir/Payload/Runner.app
-          cd Payload_dir
-          zip -r ../susedko_final.ipa Payload
-          cd ..
           app-store-connect publish \
-            --path $CM_BUILD_DIR/ipa/susedko_final.ipa \
+            --path $CM_BUILD_DIR/ipa/susedko.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
+
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
