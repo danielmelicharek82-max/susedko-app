@@ -4,96 +4,30 @@ workflows:
     max_build_duration: 120
 
     environment:
-      flutter: 3.44.0
+      flutter: 3.24.0
       xcode: latest
       cocoapods: default
 
     scripts:
-      - name: Install Certificate
-        script: |
-          security create-keychain -p "build" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "build" build.keychain
-          security set-keychain-settings -t 3600 -l build.keychain
-
-          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
-
-          security import /tmp/cert.p12 \
-            -k build.keychain \
-            -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security \
-            -f pkcs12 \
-            -A
-
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "build" \
-            build.keychain
-
-          security find-identity -v -p codesigning build.keychain
-
       - name: Flutter clean
-        script: |
-          flutter clean
+        script: flutter clean
 
-      - name: Get Flutter packages
-        script: |
-          flutter pub get
+      - name: Get packages
+        script: flutter pub get
 
-      - name: Clean CocoaPods
+      - name: Install pods
         script: |
           cd ios
-          rm -rf Pods
-          rm -rf Podfile.lock
-          pod repo update
-          pod install --clean-install
-          find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
+          pod install --repo-update
           cd ..
 
-      - name: Build iOS archive
-        script: |
-          cp ios/AuthKey.p8 /tmp/AuthKey.p8
-
-          flutter build ios --release --no-codesign
-
-          cd ios
-
-          xcodebuild \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -sdk iphoneos \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=SQ2VV7TA67 \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            archive
-
-      - name: Export IPA
-        script: |
-          cd ios
-
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath $CM_BUILD_DIR/ipa \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
-
-      - name: Upload to TestFlight
-        script: |
-          app-store-connect publish \
-            --path $CM_BUILD_DIR/ipa/susedko.ipa \
-            --key-id "S6JD8KBSNV" \
-            --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
-            --private-key @file:/tmp/AuthKey.p8 \
-            --testflight
+      - name: Build IPA (SIGNED AUTOMATICALLY)
+        script: flutter build ipa --release
 
     artifacts:
-      - $CM_BUILD_DIR/ipa/*.ipa
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
