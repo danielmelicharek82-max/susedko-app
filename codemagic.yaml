@@ -25,12 +25,11 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=SQ2VV7TA67 \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             archive
           xcodebuild -exportArchive \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
