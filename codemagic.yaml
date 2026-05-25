@@ -7,6 +7,15 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Install Certificate
+        script: |
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
       - name: Get Flutter packages
         script: flutter pub get
       - name: Pod install
@@ -43,18 +52,13 @@ workflows:
         script: |
           cd $CM_BUILD_DIR/ipa
           unzip -o susedko.ipa -d Payload_dir
-          find Payload_dir/Payload/Runner.app/Frameworks -type f -not -name "*.plist" -not -name "*.nib" | while read binary; do
-            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
-              --preserve-metadata=identifier,entitlements \
-              "$binary" || true
+          find Payload_dir/Payload/Runner.app/Frameworks -type f | while read f; do
+            file "$f" | grep -q "Mach-O" && codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$f" || true
           done
           find Payload_dir/Payload/Runner.app/Frameworks -name "*.framework" | while read fw; do
-            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
-              --preserve-metadata=identifier,entitlements \
-              "$fw" || true
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$fw" || true
           done
           codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
-            --preserve-metadata=identifier,entitlements \
             Payload_dir/Payload/Runner.app
           cd Payload_dir
           zip -r ../susedko_final.ipa Payload
