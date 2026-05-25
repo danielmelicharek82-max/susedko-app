@@ -7,6 +7,22 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Install Certificate
+        script: |
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -f pkcs12 \
+            -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "build" build.keychain
+          security find-identity -v -p codesigning build.keychain
       - name: Get Flutter packages
         script: flutter pub get
       - name: Pod install
@@ -41,8 +57,21 @@ workflows:
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
       - name: Upload to TestFlight
         script: |
+          cd $CM_BUILD_DIR/ipa
+          unzip -o susedko.ipa -d Payload_dir
+          find Payload_dir/Payload/Runner.app/Frameworks -type f | while read f; do
+            file "$f" | grep -q "Mach-O" && codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$f" || true
+          done
+          find Payload_dir/Payload/Runner.app/Frameworks -name "*.framework" | while read fw; do
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" "$fw" || true
+          done
+          codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+            Payload_dir/Payload/Runner.app
+          cd Payload_dir
+          zip -r ../susedko_final.ipa Payload
+          cd ..
           app-store-connect publish \
-            --path $CM_BUILD_DIR/ipa/susedko.ipa \
+            --path $CM_BUILD_DIR/ipa/susedko_final.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
