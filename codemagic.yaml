@@ -25,17 +25,40 @@ workflows:
       - name: Build iOS archive
         script: |
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
-          flutter build ipa --release \
-            --export-options-plist=ios/ExportOptions.plist
+          cd ios
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -sdk iphoneos \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/AuthKey.p8 \
+            -authenticationKeyID "S6JD8KBSNV" \
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=SQ2VV7TA67 \
+            archive
+
+      - name: Export IPA
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath $CM_BUILD_DIR/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/AuthKey.p8 \
+            -authenticationKeyID "S6JD8KBSNV" \
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
 
       - name: Upload to TestFlight
         script: |
           app-store-connect publish \
-            --path $(find $CM_BUILD_DIR/output -name "*.ipa") \
+            --path $(find $CM_BUILD_DIR/ipa -name "*.ipa") \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
 
     artifacts:
-      - $CM_BUILD_DIR/output/**/*.ipa
+      - $CM_BUILD_DIR/ipa/*.ipa
