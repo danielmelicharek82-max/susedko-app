@@ -7,16 +7,51 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Install Certificate
+        script: |
+          echo "P12 length: ${#CERTIFICATE_P12}"
+          echo "Profile length: ${#PROVISIONING_PROFILE}"
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -f pkcs12 \
+            -A
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "build" \
+            build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Install Provisioning Profile
+        script: |
+          echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          UUID=$(security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw -)
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          echo "Installed profile: $UUID"
+
       - name: Flutter clean
-        script: flutter clean
+        script: |
+          flutter clean
 
       - name: Get Flutter packages
-        script: flutter pub get
+        script: |
+          flutter pub get
 
       - name: Clean CocoaPods
         script: |
           cd ios
-          rm -rf Pods Podfile.lock
+          rm -rf Pods
+          rm -rf Podfile.lock
           pod repo update
           pod install --clean-install
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
@@ -25,6 +60,7 @@ workflows:
       - name: Build iOS archive
         script: |
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
+          flutter build ios --release --no-codesign
           cd ios
           xcodebuild \
             -workspace Runner.xcworkspace \
@@ -32,13 +68,21 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/Runner.xcarchive \
             -sdk iphoneos \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=SQ2VV7TA67 \
+            CODE_SIGNING_ALLOWED=NO \
             archive
+
+      - name: Debug Signing
+        script: |
+          echo "=== Keychains ==="
+          security list-keychains
+          echo "=== Identities in build.keychain ==="
+          security find-identity -v -p codesigning build.keychain
+          echo "=== All identities ==="
+          security find-identity -v -p codesigning
+          echo "=== Provisioning Profiles ==="
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
+          echo "=== Profile UUID check ==="
+          security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
 
       - name: Export IPA
         script: |
@@ -54,7 +98,7 @@ workflows:
       - name: Upload to TestFlight
         script: |
           app-store-connect publish \
-            --path $(find $CM_BUILD_DIR/ipa -name "*.ipa") \
+            --path $CM_BUILD_DIR/ipa/susedko.ipa \
             --key-id "S6JD8KBSNV" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
