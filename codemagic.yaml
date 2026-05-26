@@ -6,9 +6,15 @@ workflows:
       flutter: 3.44.0
       xcode: latest
       cocoapods: default
+      vars:
+        CERTIFICATE_P12: $CERTIFICATE_P12
+        CERTIFICATE_PASSWORD: $CERTIFICATE_PASSWORD
+        PROVISIONING_PROFILE: $PROVISIONING_PROFILE
     scripts:
       - name: Install Certificate
         script: |
+          echo "P12 length: ${#CERTIFICATE_P12}"
+          echo "Profile length: ${#PROVISIONING_PROFILE}"
           security create-keychain -p "build" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "build" build.keychain
@@ -28,19 +34,6 @@ workflows:
             build.keychain
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning build.keychain
-
-      - name: Debug Signing
-        script: |
-          echo "=== Keychains ==="
-          security list-keychains
-          echo "=== Identities in build.keychain ==="
-          security find-identity -v -p codesigning build.keychain
-          echo "=== All identities ==="
-          security find-identity -v -p codesigning
-          echo "=== Provisioning Profiles ==="
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
-          echo "=== Profile UUID check ==="
-          security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
 
       - name: Install Provisioning Profile
         script: |
@@ -81,6 +74,19 @@ workflows:
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             archive
+
+      - name: Debug Signing
+        script: |
+          echo "=== Keychains ==="
+          security list-keychains
+          echo "=== Identities in build.keychain ==="
+          security find-identity -v -p codesigning build.keychain
+          echo "=== All identities ==="
+          security find-identity -v -p codesigning
+          echo "=== Provisioning Profiles ==="
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
+          echo "=== Profile UUID check ==="
+          security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
 
       - name: Export IPA
         script: |
