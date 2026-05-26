@@ -6,10 +6,6 @@ workflows:
       flutter: 3.44.0
       xcode: latest
       cocoapods: default
-      vars:
-        CERTIFICATE_P12: $CERTIFICATE_P12
-        CERTIFICATE_PASSWORD: $CERTIFICATE_PASSWORD
-        PROVISIONING_PROFILE: $PROVISIONING_PROFILE
     scripts:
       - name: Install Certificate
         script: |
