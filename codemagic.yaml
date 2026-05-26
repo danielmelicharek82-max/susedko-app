@@ -6,6 +6,8 @@ workflows:
       flutter: 3.44.0
       xcode: latest
       cocoapods: default
+      groups:
+        - DMX
     scripts:
       - name: Install Certificate
         script: |
