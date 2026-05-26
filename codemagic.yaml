@@ -12,8 +12,10 @@ workflows:
     scripts:
       - name: Flutter clean
         script: flutter clean
+
       - name: Get Flutter packages
         script: flutter pub get
+
       - name: Clean CocoaPods
         script: |
           cd ios
@@ -22,11 +24,13 @@ workflows:
           pod install --clean-install
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
+
       - name: Build iOS archive
         script: |
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist
+
       - name: Upload to TestFlight
         script: |
           app-store-connect publish \
@@ -35,5 +39,6 @@ workflows:
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
+
     artifacts:
       - $CM_BUILD_DIR/output/**/*.ipa
