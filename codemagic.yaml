@@ -26,6 +26,7 @@ workflows:
             -s \
             -k "build" \
             build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning build.keychain
 
       - name: Install Provisioning Profile
@@ -77,8 +78,7 @@ workflows:
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
-            OTHER_CODE_SIGN_FLAGS="--keychain /Users/builder/Library/Keychains/build.keychain-db"
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
 
       - name: Upload to TestFlight
         script: |
