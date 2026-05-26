@@ -29,6 +29,19 @@ workflows:
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning build.keychain
 
+      - name: Debug Signing
+        script: |
+          echo "=== Keychains ==="
+          security list-keychains
+          echo "=== Identities in build.keychain ==="
+          security find-identity -v -p codesigning build.keychain
+          echo "=== All identities ==="
+          security find-identity -v -p codesigning
+          echo "=== Provisioning Profiles ==="
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
+          echo "=== Profile UUID check ==="
+          security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
+
       - name: Install Provisioning Profile
         script: |
           echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
