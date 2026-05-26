@@ -6,9 +6,6 @@ workflows:
       flutter: 3.44.0
       xcode: latest
       cocoapods: default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.melicharek.susedko
     scripts:
       - name: Flutter clean
         script: flutter clean
