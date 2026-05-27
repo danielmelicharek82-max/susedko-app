@@ -9,7 +9,7 @@ workflows:
       groups:
         - DMX
     scripts:
-- name: Install Certificate
+      - name: Install Certificate
         script: |
           echo "P12 length: ${#CERTIFICATE_P12}"
           echo "Profile length: ${#PROVISIONING_PROFILE}"
