@@ -92,6 +92,17 @@ workflows:
           echo "=== Profile UUID check ==="
           security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
 
+      - name: Sign Frameworks
+        script: |
+          find $CM_BUILD_DIR/Runner.xcarchive -name "*.framework" -type d | while read framework; do
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+              --keychain /Users/builder/Library/Keychains/build.keychain-db \
+              "$framework"
+          done
+          codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+            --keychain /Users/builder/Library/Keychains/build.keychain-db \
+            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app      
+      
       - name: Export IPA
         script: |
           xcodebuild -exportArchive \
