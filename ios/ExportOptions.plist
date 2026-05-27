@@ -7,7 +7,12 @@
     <key>teamID</key>
     <string>SQ2VV7TA67</string>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.melicharek.susedko</key>
+        <string>Susedko App Store 2027</string>
+    </dict>
     <key>stripSwiftSymbols</key>
     <true/>
     <key>uploadBitcode</key>
