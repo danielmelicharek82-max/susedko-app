@@ -9,7 +9,7 @@ workflows:
       groups:
         - DMX
     scripts:
-      - name: Install Certificate
+- name: Install Certificate
         script: |
           echo "P12 length: ${#CERTIFICATE_P12}"
           echo "Profile length: ${#PROVISIONING_PROFILE}"
@@ -25,6 +25,12 @@ workflows:
             -T /usr/bin/security \
             -f pkcs12 \
             -A
+          curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer
+          curl -sO https://www.apple.com/appleca/AppleIncRootCertificate.cer
+          security import AppleWWDRCAG3.cer -k build.keychain -A
+          security import AppleWWDRCAG4.cer -k build.keychain -A
+          security import AppleIncRootCertificate.cer -k build.keychain -A
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
