@@ -101,7 +101,8 @@ workflows:
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
             -authenticationKeyID "S6JD8KBSNV" \
-            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0"
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            OTHER_CODE_SIGN_FLAGS="--keychain /Users/builder/Library/Keychains/build.keychain-db"
 
       - name: Upload to TestFlight
         script: |
