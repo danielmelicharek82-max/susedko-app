@@ -47,11 +47,26 @@
     <key>NSCameraUsageDescription</key>
     <string>Aplikácia používa kameru na pridávanie fotografií k zákazkám.</string>
 
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Aplikácia potrebuje prístup k fotogalérii na nahrávanie fotografií.</string>
+
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Aplikácia môže ukladať fotografie do vašej galérie.</string>
+
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Aplikácia používa polohu na zobrazenie remeselníkov vo vašom okolí.</string>
 
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Aplikácia môže používať polohu aj na pozadí pre lepšie služby.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Aplikácia potrebuje prístup k mikrofónu pre hlasové správy.</string>
+
+    <key>NSContactsUsageDescription</key>
+    <string>Aplikácia potrebuje prístup ku kontaktom pre jednoduchšie zdieľanie.</string>
+
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
@@ -108,5 +123,4 @@
     </array>
 
 </dict>
-</plist>	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+</plist>
