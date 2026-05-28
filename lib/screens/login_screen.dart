@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 
 import 'customer/customer_home.dart';
 import 'craftsman/craftsman_home.dart';
@@ -32,6 +36,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _isLoading       = false;
   bool _isGoogleLoading = false;
+  bool _isAppleLoading  = false;
   bool _passwordVisible = false;
 
   late AnimationController _fadeCtrl;
@@ -153,6 +158,78 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(length, (_) => charset[random.nextInt(charset.length)])
+        .join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  Future<void> _signInWithApple() async {
+    setState(() => _isAppleLoading = true);
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+      );
+
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      final uid = userCredential.user!.uid;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users').doc(uid).get();
+      if (!mounted) return;
+
+      if (doc.exists) {
+        final role =
+            (doc.data()?['role'] as String?)?.trim().toLowerCase() ??
+                'customer';
+        _navigateByRole(role);
+      } else {
+        // Save display name if available
+        final displayName = [
+          appleCredential.givenName,
+          appleCredential.familyName,
+        ].where((n) => n != null).join(' ');
+
+        if (displayName.isNotEmpty) {
+          await userCredential.user?.updateDisplayName(displayName);
+        }
+
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(
+                builder: (_) => RoleSelectionScreen(uid: uid)));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (e.toString().contains('canceled')) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()),
+              backgroundColor: Colors.red.shade700));
+    } finally {
+      if (mounted) setState(() => _isAppleLoading = false);
+    }
+  }
+
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
@@ -235,9 +312,7 @@ class _LoginScreenState extends State<LoginScreen>
                     offset: Offset(0, -_floatAnim.value),
                     child: child),
                   child: Column(children: [
-                    // Logo with glow effect — no white background
                     Stack(alignment: Alignment.center, children: [
-                      // Outer glow
                       Container(
                         width: 110, height: 110,
                         decoration: BoxDecoration(
@@ -250,7 +325,6 @@ class _LoginScreenState extends State<LoginScreen>
                               color: _kPrimary.withOpacity(0.2),
                               blurRadius: 80, spreadRadius: 20),
                           ])),
-                      // Logo container with gradient border
                       Container(
                         width: 90, height: 90,
                         decoration: BoxDecoration(
@@ -269,13 +343,10 @@ class _LoginScreenState extends State<LoginScreen>
                             'assets/logo.png',
                             width: 90, height: 90,
                             fit: BoxFit.contain,
-                            // This makes white background transparent
-                            color: null,
                           ))),
                     ]),
                     const SizedBox(height: 16),
 
-                    // App name with shimmer
                     AnimatedBuilder(
                       animation: _shimmerAnim,
                       builder: (_, __) => ShaderMask(
@@ -369,6 +440,12 @@ class _LoginScreenState extends State<LoginScreen>
                       onTap: _isGoogleLoading ? null : _signInWithGoogle,
                       loading: _isGoogleLoading,
                       text: 'signInWithGoogle'.tr()),
+                    const SizedBox(height: 12),
+
+                    // Apple button
+                    _AppleButton(
+                      onTap: _isAppleLoading ? null : _signInWithApple,
+                      loading: _isAppleLoading),
                   ])),
                 const SizedBox(height: 28),
 
@@ -388,7 +465,6 @@ class _LoginScreenState extends State<LoginScreen>
                           fontSize: 13)),
                     const SizedBox(height: 14),
                     Row(children: [
-                      // Customer register
                       Expanded(child: _RegisterBtn(
                         label: 'customer'.tr(),
                         icon: Icons.person_outline,
@@ -397,7 +473,6 @@ class _LoginScreenState extends State<LoginScreen>
                             MaterialPageRoute(builder: (_) =>
                                 const CustomerRegisterForm())))),
                       const SizedBox(width: 12),
-                      // Craftsman register
                       Expanded(child: _RegisterBtn(
                         label: 'craftsman'.tr(),
                         icon: Icons.handyman_outlined,
@@ -546,7 +621,6 @@ class _GoogleButton extends StatelessWidget {
                 child: CircularProgressIndicator(
                     color: Colors.white, strokeWidth: 2))
             : Row(mainAxisSize: MainAxisSize.min, children: [
-                // Google G icon
                 Container(
                   width: 20, height: 20,
                   decoration: const BoxDecoration(
@@ -561,6 +635,43 @@ class _GoogleButton extends StatelessWidget {
                 Text(text, style: TextStyle(
                     color: Colors.white.withOpacity(0.85),
                     fontWeight: FontWeight.w500, fontSize: 14)),
+              ]))));
+  }
+}
+
+// ── Apple button ───────────────────────────────────────────────────────────────
+class _AppleButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  final bool loading;
+
+  const _AppleButton({
+    required this.onTap,
+    required this.loading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.15))),
+        child: Center(child: loading
+            ? const SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(
+                    color: Colors.black, strokeWidth: 2))
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.apple, color: Colors.black, size: 22),
+                const SizedBox(width: 8),
+                const Text('Sign in with Apple',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14)),
               ]))));
   }
 }

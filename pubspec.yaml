@@ -49,6 +49,8 @@ dependencies:
   # ─── Auth ──────────────────────────────────────────────
   google_sign_in: ^6.1.0
   flutter_facebook_auth: ^6.0.4
+  sign_in_with_apple: ^8.0.0
+  crypto: ^3.0.7
 
   # ─── Platby ────────────────────────────────────────────
   flutter_stripe: 11.0.0
@@ -69,10 +71,10 @@ dependencies:
   table_calendar: ^3.1.0
   flutter_launcher_icons: ^0.14.4
 
-  # ─── Async utilities (StreamZip pre chunked Firestore queries) ─
+  # ─── Async utilities ───────────────────────────────────
   async: ^2.11.0
 
-  # ─── QR kód (Stripe Payment Link) ────────────────────────────
+  # ─── QR kód ────────────────────────────────────────────
   qr_flutter: ^4.1.0
 
 dev_dependencies:

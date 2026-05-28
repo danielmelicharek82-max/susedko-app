@@ -9,13 +9,14 @@ import PackageDescription
 let package = Package(
     name: "FlutterGeneratedPluginSwiftPackage",
     platforms: [
-        .iOS("14.0")
+        .iOS("13.0")
     ],
     products: [
         .library(name: "FlutterGeneratedPluginSwiftPackage", type: .static, targets: ["FlutterGeneratedPluginSwiftPackage"])
     ],
     dependencies: [
         .package(name: "url_launcher_ios", path: "../.packages/url_launcher_ios-6.3.3"),
+        .package(name: "sign_in_with_apple", path: "../.packages/sign_in_with_apple-8.0.0"),
         .package(name: "shared_preferences_foundation", path: "../.packages/shared_preferences_foundation-2.5.4"),
         .package(name: "share_plus", path: "../.packages/share_plus-12.0.2"),
         .package(name: "path_provider_foundation", path: "../.packages/path_provider_foundation-2.4.1"),
@@ -38,6 +39,7 @@ let package = Package(
             name: "FlutterGeneratedPluginSwiftPackage",
             dependencies: [
                 .product(name: "url-launcher-ios", package: "url_launcher_ios"),
+                .product(name: "sign-in-with-apple", package: "sign_in_with_apple"),
                 .product(name: "shared-preferences-foundation", package: "shared_preferences_foundation"),
                 .product(name: "share-plus", package: "share_plus"),
                 .product(name: "path-provider-foundation", package: "path_provider_foundation"),
