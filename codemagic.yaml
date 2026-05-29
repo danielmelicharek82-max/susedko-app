@@ -42,6 +42,7 @@ workflows:
       - name: Install Provisioning Profile
         script: |
           echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          security cms -D -i /tmp/profile.mobileprovision | grep -A2 "applesignin" || echo "applesignin NOT found in profile"
           UUID=$(security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw -)
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
