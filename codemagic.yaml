@@ -104,7 +104,8 @@ workflows:
           done
           codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
             --keychain /Users/builder/Library/Keychains/build.keychain-db \
-            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app      
+            --entitlements ios/Runner/Runner.entitlements \
+            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app
       
       - name: Export IPA
         script: |
