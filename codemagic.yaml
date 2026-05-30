@@ -47,7 +47,6 @@ workflows:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           echo "Installed profile: $UUID"
-          exit 1
 
       - name: Flutter clean
         script: |
@@ -83,6 +82,8 @@ workflows:
 
       - name: Debug Signing
         script: |
+          echo "=== Checking entitlements in archive ==="
+          codesign -d --entitlements - $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app 2>/dev/null || echo "Failed to read entitlements"
           echo "=== Keychains ==="
           security list-keychains
           echo "=== Identities in build.keychain ==="
