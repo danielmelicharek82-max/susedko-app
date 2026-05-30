@@ -25,34 +25,33 @@ class GeoService {
         return null;
       }
 
-      // 2. Service check (iOS môže byť flaky → neblokujeme)
+      // 2. Najprv skús lastKnown - je okamžité
       try {
-        await Geolocator.isLocationServiceEnabled();
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null) {
+          debugPrint('GeoService: using lastKnown position');
+          return last;
+        }
       } catch (e) {
-        debugPrint('GeoService: service check ignored: $e');
+        debugPrint('GeoService: lastKnown failed: $e');
       }
 
-      // 3. Retry loop (fix pre iOS cold start GPS)
-      Position? position;
-
-      for (int attempt = 1; attempt <= 3; attempt++) {
+      // 3. Fallback na getCurrentPosition s kratším timeoutom
+      for (int attempt = 1; attempt <= 2; attempt++) {
         try {
-          position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 10),
+          final position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 6),
           );
-
-          if (position != null) {
-            debugPrint('GeoService: position acquired on attempt $attempt');
-            break;
-          }
+          debugPrint('GeoService: position acquired on attempt $attempt');
+          return position;
         } catch (e) {
           debugPrint('GeoService attempt $attempt failed: $e');
-          await Future.delayed(const Duration(milliseconds: 800));
+          await Future.delayed(const Duration(milliseconds: 500));
         }
       }
 
-      return position;
+      return null;
     } catch (e) {
       debugPrint('GeoService fatal error: $e');
       return null;
@@ -86,7 +85,6 @@ class GeoService {
             c.geoPoint!.latitude,
             c.geoPoint!.longitude,
           );
-
           return CraftsmanWithDistance(
             craftsman: c,
             distanceKm: dist,
@@ -124,16 +122,13 @@ class GeoService {
     double lng2,
   ) {
     const r = 6371.0;
-
     final dLat = _toRad(lat2 - lat1);
     final dLng = _toRad(lng2 - lng1);
-
     final a = sin(dLat / 2) * sin(dLat / 2) +
         cos(_toRad(lat1)) *
             cos(_toRad(lat2)) *
             sin(dLng / 2) *
             sin(dLng / 2);
-
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
@@ -159,6 +154,5 @@ class CraftsmanWithDistance {
     required this.distanceKm,
   });
 
-  String get formattedDistance =>
-      GeoService.formatDistance(distanceKm);
+  String get formattedDistance => GeoService.formatDistance(distanceKm);
 }
