@@ -47,6 +47,7 @@ workflows:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           echo "Installed profile: $UUID"
+          exit 1
 
       - name: Flutter clean
         script: |
