@@ -4,11 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'dart:convert';
-import 'dart:math';
-import 'package:crypto/crypto.dart';
 
 import 'customer/customer_home.dart';
 import 'craftsman/craftsman_home.dart';
@@ -158,47 +154,17 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  String _generateNonce([int length = 32]) {
-    const charset =
-        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
-    final random = Random.secure();
-    return List.generate(length, (_) => charset[random.nextInt(charset.length)])
-        .join();
-  }
-
-  String _sha256ofString(String input) {
-    final bytes = utf8.encode(input);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
   Future<void> _signInWithApple() async {
     setState(() => _isAppleLoading = true);
     try {
-      final rawNonce = _generateNonce();
-      final nonce = _sha256ofString(rawNonce);
+      final appleProvider = AppleAuthProvider()
+        ..addScope('email')
+        ..addScope('fullName');
 
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-        nonce: nonce,
-      );
+      final userCredential = await FirebaseAuth.instance
+          .signInWithProvider(appleProvider);
 
-      if (appleCredential.identityToken == null) {
-        throw Exception('Apple identity token is null');
-      }
-
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        rawNonce: rawNonce,
-      );
-
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
       final uid = userCredential.user!.uid;
-
       final doc = await FirebaseFirestore.instance
           .collection('users').doc(uid).get();
       if (!mounted) return;
@@ -209,15 +175,6 @@ class _LoginScreenState extends State<LoginScreen>
                 'customer';
         _navigateByRole(role);
       } else {
-        final displayName = [
-          appleCredential.givenName,
-          appleCredential.familyName,
-        ].where((n) => n != null).join(' ');
-
-        if (displayName.isNotEmpty) {
-          await userCredential.user?.updateDisplayName(displayName);
-        }
-
         Navigator.pushReplacement(context,
             MaterialPageRoute(
                 builder: (_) => RoleSelectionScreen(uid: uid)));
@@ -229,14 +186,11 @@ class _LoginScreenState extends State<LoginScreen>
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Apple Sign In Error'),
-          content: SingleChildScrollView(
-            child: Text(e.toString()),
-          ),
+          content: SingleChildScrollView(child: Text(e.toString())),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
+              child: const Text('OK')),
           ],
         ),
       );
