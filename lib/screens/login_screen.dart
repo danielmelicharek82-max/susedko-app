@@ -178,6 +178,7 @@ class _LoginScreenState extends State<LoginScreen>
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
 
+      debugPrint('DEBUG: Getting Apple credential...');
       final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
@@ -186,15 +187,23 @@ class _LoginScreenState extends State<LoginScreen>
         nonce: nonce,
       );
 
+      debugPrint('DEBUG: identityToken null? ${appleCredential.identityToken == null}');
+      debugPrint('DEBUG: authorizationCode null? ${appleCredential.authorizationCode == null}');
+
+      if (appleCredential.identityToken == null) {
+        throw Exception('Apple identity token is null');
+      }
+
       final oauthCredential = OAuthProvider('apple.com').credential(
         idToken: appleCredential.identityToken,
         rawNonce: rawNonce,
-        accessToken: appleCredential.authorizationCode,
       );
 
+      debugPrint('DEBUG: Signing in with Firebase...');
       final userCredential =
           await FirebaseAuth.instance.signInWithCredential(oauthCredential);
       final uid = userCredential.user!.uid;
+      debugPrint('DEBUG: Firebase sign in success, uid: $uid');
 
       final doc = await FirebaseFirestore.instance
           .collection('users').doc(uid).get();
@@ -206,7 +215,6 @@ class _LoginScreenState extends State<LoginScreen>
                 'customer';
         _navigateByRole(role);
       } else {
-        // Save display name if available
         final displayName = [
           appleCredential.givenName,
           appleCredential.familyName,
@@ -221,6 +229,7 @@ class _LoginScreenState extends State<LoginScreen>
                 builder: (_) => RoleSelectionScreen(uid: uid)));
       }
     } catch (e) {
+      debugPrint('DEBUG: Apple sign in error: $e');
       if (!mounted) return;
       if (e.toString().contains('canceled')) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -248,7 +257,6 @@ class _LoginScreenState extends State<LoginScreen>
     return Scaffold(
       body: Stack(children: [
 
-        // ── Background gradient ──────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -262,7 +270,6 @@ class _LoginScreenState extends State<LoginScreen>
               end: Alignment.bottomRight)),
         ),
 
-        // ── Decorative glow orbs ─────────────────────────────────────────
         Positioned(top: -100, left: -80,
           child: _GlowOrb(size: 320,
               color: _kPrimary.withOpacity(0.18))),
@@ -276,7 +283,6 @@ class _LoginScreenState extends State<LoginScreen>
           child: _GlowOrb(size: 140,
               color: _kGreen.withOpacity(0.08))),
 
-        // ── Stars / particles ────────────────────────────────────────────
         ...List.generate(12, (i) {
           final positions = [
             [0.1, 0.08], [0.85, 0.12], [0.45, 0.05],
@@ -296,7 +302,6 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle)));
         }),
 
-        // ── Content ──────────────────────────────────────────────────────
         SafeArea(
           child: FadeTransition(
             opacity: _fadeAnim,
@@ -306,7 +311,6 @@ class _LoginScreenState extends State<LoginScreen>
               child: Column(children: [
                 const SizedBox(height: 20),
 
-                // ── Logo + title ────────────────────────────────────────
                 AnimatedBuilder(
                   animation: _floatAnim,
                   builder: (_, child) => Transform.translate(
@@ -375,7 +379,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ])),
                 const SizedBox(height: 36),
 
-                // ── Glass card ──────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -390,7 +393,6 @@ class _LoginScreenState extends State<LoginScreen>
                     ]),
                   child: Column(children: [
 
-                    // Email field
                     _GlassField(
                       controller: _emailController,
                       label: 'email'.tr(),
@@ -398,7 +400,6 @@ class _LoginScreenState extends State<LoginScreen>
                       keyboardType: TextInputType.emailAddress),
                     const SizedBox(height: 14),
 
-                    // Password field
                     _GlassField(
                       controller: _passwordController,
                       label: 'password'.tr(),
@@ -414,7 +415,6 @@ class _LoginScreenState extends State<LoginScreen>
                             () => _passwordVisible = !_passwordVisible))),
                     const SizedBox(height: 8),
 
-                    // Forgot password
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
@@ -428,7 +428,6 @@ class _LoginScreenState extends State<LoginScreen>
                               fontSize: 13)))),
                     const SizedBox(height: 20),
 
-                    // Sign in button
                     _GradientButton(
                       onTap: _isLoading ? null : _submit,
                       loading: _isLoading,
@@ -436,21 +435,18 @@ class _LoginScreenState extends State<LoginScreen>
                       colors: const [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
                     const SizedBox(height: 12),
 
-                    // Google button
                     _GoogleButton(
                       onTap: _isGoogleLoading ? null : _signInWithGoogle,
                       loading: _isGoogleLoading,
                       text: 'signInWithGoogle'.tr()),
                     const SizedBox(height: 12),
 
-                    // Apple button
                     _AppleButton(
                       onTap: _isAppleLoading ? null : _signInWithApple,
                       loading: _isAppleLoading),
                   ])),
                 const SizedBox(height: 28),
 
-                // ── Register section ────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -491,7 +487,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// ── Glow orb ──────────────────────────────────────────────────────────────────
 class _GlowOrb extends StatelessWidget {
   final double size;
   final Color color;
@@ -507,7 +502,6 @@ class _GlowOrb extends StatelessWidget {
       color: color));
 }
 
-// ── Glass text field ───────────────────────────────────────────────────────────
 class _GlassField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -556,7 +550,6 @@ class _GlassField extends StatelessWidget {
   }
 }
 
-// ── Gradient button ────────────────────────────────────────────────────────────
 class _GradientButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
@@ -594,7 +587,6 @@ class _GradientButton extends StatelessWidget {
   }
 }
 
-// ── Google button ──────────────────────────────────────────────────────────────
 class _GoogleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
@@ -640,7 +632,6 @@ class _GoogleButton extends StatelessWidget {
   }
 }
 
-// ── Apple button ───────────────────────────────────────────────────────────────
 class _AppleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
@@ -677,7 +668,6 @@ class _AppleButton extends StatelessWidget {
   }
 }
 
-// ── Register button ────────────────────────────────────────────────────────────
 class _RegisterBtn extends StatelessWidget {
   final String label;
   final IconData icon;
