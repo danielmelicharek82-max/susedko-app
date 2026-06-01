@@ -59,9 +59,7 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('craftsmen').doc(uid).get();
-      if (!doc.exists || !mounted) {
-        setState(() => _loading = false); return;
-      }
+      if (!doc.exists || !mounted) { setState(() => _loading = false); return; }
       final c = Craftsman.fromFirestore(doc);
       setState(() {
         _craftsman = c; _loading = false;
@@ -196,7 +194,8 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Account'),
         content: const Text(
-          'Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.'),
+          'Are you sure you want to permanently delete your account? '
+          'This action cannot be undone and all your data will be lost.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -215,10 +214,47 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       final uid = user.uid;
+      final db = FirebaseFirestore.instance;
 
-      // Vymazanie Firestore dát
-      await FirebaseFirestore.instance.collection('craftsmen').doc(uid).delete();
-      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+      // Vymazanie profilu
+      await db.collection('craftsmen').doc(uid).delete();
+      await db.collection('users').doc(uid).delete();
+
+      // Vymazanie bookings remeselníka
+      final bookings = await db.collection('bookings')
+          .where('craftsmanId', isEqualTo: uid).get();
+      for (final doc in bookings.docs) {
+        await doc.reference.delete();
+      }
+
+      // Vymazanie reviews remeselníka
+      final reviews = await db.collection('reviews')
+          .where('craftsmanId', isEqualTo: uid).get();
+      for (final doc in reviews.docs) {
+        await doc.reference.delete();
+      }
+
+      // Vymazanie work orders
+      final workOrders = await db.collection('workOrders')
+          .where('craftsmanId', isEqualTo: uid).get();
+      for (final doc in workOrders.docs) {
+        await doc.reference.delete();
+      }
+
+      // Vymazanie fotiek zo Storage
+      try {
+        await FirebaseStorage.instance
+            .ref().child('craftsmen/$uid/profile.jpg').delete();
+      } catch (_) {}
+
+      // Vymazanie portfolio fotiek
+      try {
+        final portfolioRef = FirebaseStorage.instance.ref().child('craftsmen/$uid/portfolio');
+        final portfolioList = await portfolioRef.listAll();
+        for (final item in portfolioList.items) {
+          await item.delete();
+        }
+      } catch (_) {}
 
       // Vymazanie Firebase Auth účtu
       await user.delete();
@@ -278,13 +314,11 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
       if (_editMode)
         TextButton(
             onPressed: () => setState(() => _editMode = false),
-            child: Text('cancel'.tr(),
-                style: const TextStyle(color: Colors.white70))),
+            child: Text('cancel'.tr(), style: const TextStyle(color: Colors.white70))),
       if (!_editMode && _craftsman != null)
         IconButton(
             icon: const Icon(Icons.share_outlined, color: Colors.white),
-            onPressed: _shareProfile,
-            tooltip: 'shareProfile'.tr()),
+            onPressed: _shareProfile, tooltip: 'shareProfile'.tr()),
       IconButton(
           icon: const Icon(Icons.logout, color: Colors.white),
           onPressed: _logout),
@@ -558,7 +592,6 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
             onPressed: _logout)),
           const SizedBox(height: 10),
 
-          // Delete Account button
           SizedBox(width: double.infinity, child: OutlinedButton.icon(
             icon: const Icon(Icons.delete_forever),
             label: const Text('Delete Account'),

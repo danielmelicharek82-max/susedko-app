@@ -134,7 +134,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Account'),
         content: const Text(
-          'Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.'),
+          'Are you sure you want to permanently delete your account? '
+          'This action cannot be undone and all your data will be lost.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -153,9 +154,31 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       final uid = user.uid;
+      final db = FirebaseFirestore.instance;
 
-      // Vymazanie Firestore dát
-      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+      // Vymazanie profilu
+      await db.collection('users').doc(uid).delete();
+      await db.collection('customers').doc(uid).delete();
+
+      // Vymazanie bookings zákazníka
+      final bookings = await db.collection('bookings')
+          .where('customerId', isEqualTo: uid).get();
+      for (final doc in bookings.docs) {
+        await doc.reference.delete();
+      }
+
+      // Vymazanie reviews zákazníka
+      final reviews = await db.collection('reviews')
+          .where('customerId', isEqualTo: uid).get();
+      for (final doc in reviews.docs) {
+        await doc.reference.delete();
+      }
+
+      // Vymazanie profilovej fotky zo Storage
+      try {
+        await FirebaseStorage.instance
+            .ref().child('users/$uid/profile.jpg').delete();
+      } catch (_) {}
 
       // Vymazanie Firebase Auth účtu
       await user.delete();
@@ -271,12 +294,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               else
                 IconButton(
                   icon: const Icon(Icons.save_outlined, color: Colors.white),
-                  onPressed: _save,
-                  tooltip: 'save'.tr()),
+                  onPressed: _save, tooltip: 'save'.tr()),
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white),
-                onPressed: _logout,
-                tooltip: 'logout'.tr()),
+                onPressed: _logout, tooltip: 'logout'.tr()),
             ],
           ),
         ],
@@ -284,14 +305,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
           child: Column(children: [
 
-            // Stats
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(
-                    color: _kPrimary.withOpacity(0.07),
+                color: Colors.white, borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: _kPrimary.withOpacity(0.07),
                     blurRadius: 16, offset: const Offset(0, 4))]),
               child: Row(children: [
                 Expanded(child: _statBox(Icons.work_outline, '$_bookingsCount',
@@ -302,7 +320,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               ])),
             const SizedBox(height: 16),
 
-            // Name
             _sectionCard(
               title: 'name'.tr(),
               icon: Icons.person_outline_rounded,
@@ -318,7 +335,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               )),
             const SizedBox(height: 16),
 
-            // Preferred professions
             _sectionCard(
               title: 'preferredServices'.tr(),
               icon: Icons.handyman_outlined,
@@ -373,7 +389,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               ])),
             const SizedBox(height: 16),
 
-            // Save button
             _saving
                 ? const Center(child: CircularProgressIndicator(color: _kPrimary))
                 : GestureDetector(
@@ -384,12 +399,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [_kDeep, _kPrimary],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight),
+                          begin: Alignment.topLeft, end: Alignment.bottomRight),
                         borderRadius: BorderRadius.circular(14),
-                        boxShadow: [BoxShadow(
-                          color: _kPrimary.withOpacity(0.3),
-                          blurRadius: 10, offset: const Offset(0, 4))]),
+                        boxShadow: [BoxShadow(color: _kPrimary.withOpacity(0.3),
+                            blurRadius: 10, offset: const Offset(0, 4))]),
                       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.save_outlined, color: Colors.white, size: 18),
                         const SizedBox(width: 8),
@@ -398,15 +411,13 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       ]))),
             const SizedBox(height: 12),
 
-            // About app
             GestureDetector(
               onTap: () => Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const AboutAppScreen())),
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.white, borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: Colors.grey.shade200)),
                 child: Row(children: [
                   Container(
@@ -469,9 +480,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12)),
           child: Icon(icon, color: color, size: 20)),
         const SizedBox(height: 6),
         Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
@@ -489,9 +499,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           Row(children: [
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _kPrimary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: _kPrimary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8)),
               child: Icon(icon, size: 15, color: _kPrimary)),
             const SizedBox(width: 8),
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold,
