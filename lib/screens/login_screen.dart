@@ -209,6 +209,17 @@ class _LoginScreenState extends State<LoginScreen>
             backgroundColor: Colors.green));
   }
 
+  // ── GUEST MODE ──────────────────────────────────────────────────────────────
+  void _continueAsGuest() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CustomerHomeScreen(isGuest: true),
+      ),
+    );
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -416,6 +427,35 @@ class _LoginScreenState extends State<LoginScreen>
                                 const CraftsmanRegisterForm())))),
                     ]),
                   ])),
+                const SizedBox(height: 16),
+
+                // ── GUEST MODE BUTTON ────────────────────────────────────────
+                GestureDetector(
+                  onTap: _continueAsGuest,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_forward_ios_rounded,
+                            size: 12,
+                            color: Colors.white.withOpacity(0.35)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'continueAsGuest'.tr(),
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.35),
+                            fontSize: 13,
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.white.withOpacity(0.2),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // ─────────────────────────────────────────────────────────────
+
                 const SizedBox(height: 20),
               ])),
           )),

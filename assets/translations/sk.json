@@ -836,5 +836,8 @@
   "openRequests_subtitle": "Zákazky vo vašich kategóriách",
   "openRequests_empty_desc": "Momentálne nie sú žiadne zákazky vo vašich kategóriách. Skúste neskôr.",
   "openRequests_no_professions_desc": "Pridajte profesie do svojho profilu aby ste videli relevantné zákazky.",
-  "openRequests_interest_info": "Zákazník dostane notifikáciu a vyberie si spomedzi všetkých záujemcov. Buďte konkrétni vo svojej správe."
+  "openRequests_interest_info": "Zákazník dostane notifikáciu a vyberie si spomedzi všetkých záujemcov. Buďte konkrétni vo svojej správe.",
+  "continueAsGuest": "Pokračovať bez registrácie",
+  "guestLoginRequired": "Prihlásenie je potrebné",
+"guestLoginRequiredDesc": "Táto funkcia je dostupná len pre prihlásených používateľov. Zaregistruj sa zadarmo a získaj plný prístup."
 }
