@@ -1,0 +1,7 @@
+NSCameraUsageDescription = "The app uses the camera to add photos to job orders.";
+NSPhotoLibraryUsageDescription = "The app needs access to your photo library to upload photos.";
+NSPhotoLibraryAddUsageDescription = "The app can save photos to your gallery.";
+NSLocationWhenInUseUsageDescription = "The app uses your location to show craftsmen near you.";
+NSLocationAlwaysAndWhenInUseUsageDescription = "The app can use your location in the background for better services.";
+NSMicrophoneUsageDescription = "The app needs microphone access for voice messages.";
+NSContactsUsageDescription = "The app needs access to contacts for easier sharing.";

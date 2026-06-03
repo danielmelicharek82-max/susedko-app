@@ -18,7 +18,8 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		BB1A2B3C4D5E6F7A8B9C0D1E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB1A2B3C4D5E6F7A8B9C0D1F /* GoogleService-Info.plist */; };
-/* End PBXBuildFile section */
+		AA000004000000000000004 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA000003000000000000003 /* InfoPlist.strings */; };
+		/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		331C8085294A63A400263BE5 /* PBXContainerItemProxy */ = {
@@ -67,7 +68,9 @@
 		9CF0690B996AB30E3547422E /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		A664F2B72FC8C3D600298BB9 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		BB1A2B3C4D5E6F7A8B9C0D1F /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+		AA000001000000000000001 /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		AA000002000000000000002 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
@@ -231,6 +234,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				sk,
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
@@ -405,7 +409,16 @@
 			name = LaunchScreen.storyboard;
 			sourceTree = "<group>";
 		};
-/* End PBXVariantGroup section */
+		AA000003000000000000003 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AA000002000000000000002 /* en */,
+				AA000001000000000000001 /* sk */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
