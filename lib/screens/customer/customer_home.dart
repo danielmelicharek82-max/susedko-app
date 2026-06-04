@@ -17,7 +17,7 @@ const _kBg      = Color(0xFFF0F4FF);
 
 class CustomerHomeScreen extends StatefulWidget {
   final bool isGuest;
-  const CustomerHomeScreen({super.key, this.isGuest = true});
+  const CustomerHomeScreen({super.key, this.isGuest = false});
   @override
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
 }
