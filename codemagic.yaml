@@ -42,7 +42,6 @@ workflows:
       - name: Install Provisioning Profile
         script: |
           echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
-          security cms -D -i /tmp/profile.mobileprovision | grep -A2 "applesignin" || echo "applesignin NOT found in profile"
           UUID=$(security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw -)
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
@@ -66,6 +65,74 @@ workflows:
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
 
+          # Patch: obnov InfoPlist.strings lokalizáciu po pod install
+          python3 << 'EOF'
+          import re
+          path = "ios/Runner.xcodeproj/project.pbxproj"
+          with open(path, "r", encoding="utf-8") as f:
+              content = f.read()
+
+          # 1. knownRegions
+          if "sk," not in content:
+              content = content.replace(
+                  "knownRegions = (\n\t\t\t\ten,\n\t\t\t\tBase,",
+                  "knownRegions = (\n\t\t\t\ten,\n\t\t\t\tsk,\n\t\t\t\tBase,"
+              )
+              print("✓ knownRegions: sk pridané")
+          else:
+              print("✓ knownRegions: sk už existuje")
+
+          # 2. PBXFileReference
+          file_ref_sk = '\t\tAA000001000000000000001 /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/InfoPlist.strings; sourceTree = "<group>"; };\n'
+          file_ref_en = '\t\tAA000002000000000000002 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };\n'
+          end_ref = "/* End PBXFileReference section */"
+          if "AA000001000000000000001" not in content:
+              content = content.replace(end_ref, file_ref_sk + file_ref_en + "\t\t" + end_ref)
+              print("✓ PBXFileReference pridané")
+          else:
+              print("✓ PBXFileReference už existuje")
+
+          # 3. PBXVariantGroup
+          variant_group = """\t\tAA000003000000000000003 /* InfoPlist.strings */ = {
+          \t\t\tisa = PBXVariantGroup;
+          \t\t\tchildren = (
+          \t\t\t\tAA000002000000000000002 /* en */,
+          \t\t\t\tAA000001000000000000001 /* sk */,
+          \t\t\t);
+          \t\t\tname = InfoPlist.strings;
+          \t\t\tsourceTree = "<group>";
+          \t\t};\n"""
+          end_variant = "/* End PBXVariantGroup section */"
+          if "AA000003000000000000003" not in content:
+              content = content.replace(end_variant, variant_group + "\t\t" + end_variant)
+              print("✓ PBXVariantGroup pridaný")
+          else:
+              print("✓ PBXVariantGroup už existuje")
+
+          # 4. PBXBuildFile
+          build_file = '\t\tAA000004000000000000004 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA000003000000000000003 /* InfoPlist.strings */; };\n'
+          end_build = "/* End PBXBuildFile section */"
+          if "AA000004000000000000004" not in content:
+              content = content.replace(end_build, build_file + "\t\t" + end_build)
+              print("✓ PBXBuildFile pridaný")
+          else:
+              print("✓ PBXBuildFile už existuje")
+
+          # 5. Resources build phase
+          assets = "\t\t\t\t97C146FD1CF9000F007C117D /* Assets.xcassets */,"
+          infoplist_res = "\t\t\t\tAA000004000000000000004 /* InfoPlist.strings in Resources */,"
+          if "AA000004000000000000004 /* InfoPlist.strings in Resources */" not in content:
+              content = content.replace(assets, infoplist_res + "\n" + assets)
+              print("✓ Resources build phase aktualizovaný")
+          else:
+              print("✓ Resources build phase už existuje")
+
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(content)
+
+          print("✓ Patch hotový")
+          EOF
+
       - name: Build iOS archive
         script: |
           cp ios/AuthKey.p8 /tmp/AuthKey.p8
@@ -82,8 +149,6 @@ workflows:
 
       - name: Debug Signing
         script: |
-          echo "=== Checking entitlements in archive ==="
-          codesign -d --entitlements - $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app 2>/dev/null || echo "Failed to read entitlements"
           echo "=== Keychains ==="
           security list-keychains
           echo "=== Identities in build.keychain ==="
@@ -104,8 +169,7 @@ workflows:
           done
           codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
             --keychain /Users/builder/Library/Keychains/build.keychain-db \
-            --entitlements ios/Runner/Runner.entitlements \
-            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app
+            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app      
       
       - name: Export IPA
         script: |
