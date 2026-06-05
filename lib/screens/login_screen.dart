@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'customer/customer_home.dart';
 import 'craftsman/craftsman_home.dart';
@@ -157,14 +158,31 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _signInWithApple() async {
     setState(() => _isAppleLoading = true);
     try {
-      final appleProvider = AppleAuthProvider()
-        ..addScope('email')
-        ..addScope('fullName');
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
 
       final userCredential = await FirebaseAuth.instance
-          .signInWithProvider(appleProvider);
+          .signInWithCredential(oauthCredential);
 
       final uid = userCredential.user!.uid;
+
+      // Aktualizuj displayName ak je dostupný
+      if (appleCredential.givenName != null) {
+        final fullName =
+            '${appleCredential.givenName} ${appleCredential.familyName ?? ''}'
+                .trim();
+        await FirebaseAuth.instance.currentUser?.updateDisplayName(fullName);
+      }
+
       final doc = await FirebaseFirestore.instance
           .collection('users').doc(uid).get();
       if (!mounted) return;
@@ -181,7 +199,8 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      if (e.toString().contains('canceled')) return;
+      if (e.toString().contains('canceled') ||
+          e.toString().contains('AuthorizationErrorCode.canceled')) return;
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
