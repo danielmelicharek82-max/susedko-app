@@ -59,12 +59,11 @@ workflows:
         script: |
           cd ios
           rm -rf Pods
-          # rm -rf Podfile.lock (disabled - keep for sign_in_with_apple)
+          rm -rf Podfile.lock
           pod repo update
           pod install --clean-install
           find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
           cd ..
-          python3 scripts/patch_pbxproj.py
 
       - name: Build iOS archive
         script: |
