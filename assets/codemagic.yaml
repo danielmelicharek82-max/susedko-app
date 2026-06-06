@@ -1,0 +1,128 @@
+workflows:
+  ios-release:
+    name: iOS Release
+    max_build_duration: 120
+    environment:
+      flutter: 3.44.0
+      xcode: latest
+      cocoapods: default
+      groups:
+        - DMX
+    scripts:
+      - name: Install Certificate
+        script: |
+          echo "P12 length: ${#CERTIFICATE_P12}"
+          echo "Profile length: ${#PROVISIONING_PROFILE}"
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -f pkcs12 \
+            -A
+          curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer
+          curl -sO https://www.apple.com/appleca/AppleIncRootCertificate.cer
+          security import AppleWWDRCAG3.cer -k build.keychain -A
+          security import AppleWWDRCAG4.cer -k build.keychain -A
+          security import AppleIncRootCertificate.cer -k build.keychain -A
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "build" \
+            build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Install Provisioning Profile
+        script: |
+          echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          UUID=$(security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw -)
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          echo "Installed profile: $UUID"
+
+      - name: Flutter clean
+        script: |
+          flutter clean
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Clean CocoaPods
+        script: |
+          cd ios
+          rm -rf Pods
+          rm -rf Podfile.lock
+          pod repo update
+          pod install --clean-install
+          find . -name "*.sh" -path "*/Pods/*" -exec chmod +x {} \;
+          cd ..
+
+      - name: Build iOS archive
+        script: |
+          cp ios/AuthKey.p8 /tmp/AuthKey.p8
+          flutter build ios --release --no-codesign
+          cd ios
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Debug Signing
+        script: |
+          echo "=== Keychains ==="
+          security list-keychains
+          echo "=== Identities in build.keychain ==="
+          security find-identity -v -p codesigning build.keychain
+          echo "=== All identities ==="
+          security find-identity -v -p codesigning
+          echo "=== Provisioning Profiles ==="
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
+          echo "=== Profile UUID check ==="
+          security cms -D -i /tmp/profile.mobileprovision | plutil -extract UUID raw - || echo "Profile decode failed"
+
+      - name: Sign Frameworks
+        script: |
+          find $CM_BUILD_DIR/Runner.xcarchive -name "*.framework" -type d | while read framework; do
+            codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+              --keychain /Users/builder/Library/Keychains/build.keychain-db \
+              "$framework"
+          done
+          codesign --force --sign "Apple Distribution: Daniel Melicharek (SQ2VV7TA67)" \
+            --keychain /Users/builder/Library/Keychains/build.keychain-db \
+            $CM_BUILD_DIR/Runner.xcarchive/Products/Applications/Runner.app      
+      
+      - name: Export IPA
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/Runner.xcarchive \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath $CM_BUILD_DIR/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath /tmp/AuthKey.p8 \
+            -authenticationKeyID "S6JD8KBSNV" \
+            -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            OTHER_CODE_SIGN_FLAGS="--keychain /Users/builder/Library/Keychains/build.keychain-db"
+
+      - name: Upload to TestFlight
+        script: |
+          app-store-connect publish \
+            --path $CM_BUILD_DIR/ipa/susedko.ipa \
+            --key-id "S6JD8KBSNV" \
+            --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
+            --private-key @file:/tmp/AuthKey.p8 \
+            --testflight
+
+    artifacts:
+      - $CM_BUILD_DIR/ipa/*.ipa
