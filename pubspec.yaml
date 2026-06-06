@@ -49,7 +49,7 @@ dependencies:
   # ─── Auth ──────────────────────────────────────────────
   google_sign_in: ^6.1.0
   flutter_facebook_auth: ^6.0.4
-  sign_in_with_apple: ^4.5.0
+  sign_in_with_apple: ^6.1.4
   crypto: ^3.0.7
 
   # ─── Platby ────────────────────────────────────────────
