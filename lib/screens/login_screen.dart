@@ -184,6 +184,10 @@ class _LoginScreenState extends State<LoginScreen>
           AppleIDAuthorizationScopes.fullName,
         ],
         nonce: nonce,
+        webAuthenticationOptions: WebAuthenticationOptions(
+          clientId: 'com.melicharek.susedko.firebase',
+          redirectUri: Uri.parse('https://drone-guard-bdeaf.firebaseapp.com/__/auth/handler'),
+        ),
       );
 
       final oauthCredential = OAuthProvider('apple.com').credential(
