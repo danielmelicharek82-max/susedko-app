@@ -1,0 +1,7 @@
+NSCameraUsageDescription = "Aplikácia používa kameru na pridávanie fotografií k zákazkám.";
+NSPhotoLibraryUsageDescription = "Aplikácia potrebuje prístup k fotogalérii na nahrávanie fotografií.";
+NSPhotoLibraryAddUsageDescription = "Aplikácia môže ukladať fotografie do vašej galérie.";
+NSLocationWhenInUseUsageDescription = "Aplikácia používa polohu na zobrazenie remeselníkov vo vašom okolí.";
+NSLocationAlwaysAndWhenInUseUsageDescription = "Aplikácia môže používať polohu aj na pozadí pre lepšie služby.";
+NSMicrophoneUsageDescription = "Aplikácia potrebuje prístup k mikrofónu pre hlasové správy.";
+NSContactsUsageDescription = "Aplikácia potrebuje prístup ku kontaktom pre jednoduchšie zdieľanie.";

@@ -184,10 +184,6 @@ class _LoginScreenState extends State<LoginScreen>
           AppleIDAuthorizationScopes.fullName,
         ],
         nonce: nonce,
-        webAuthenticationOptions: WebAuthenticationOptions(
-          clientId: 'com.melicharek.susedko.firebase',
-          redirectUri: Uri.parse('https://drone-guard-bdeaf.firebaseapp.com/__/auth/handler'),
-        ),
       );
 
       final oauthCredential = OAuthProvider('apple.com').credential(
@@ -652,7 +648,7 @@ class _AppleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
 
-  const _AppleButton({required this.onTap, required this.loading});
+  _AppleButton({required this.onTap, required this.loading});
 
   @override
   Widget build(BuildContext context) {
@@ -672,7 +668,7 @@ class _AppleButton extends StatelessWidget {
             : Row(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.apple, color: Colors.black, size: 22),
                 const SizedBox(width: 8),
-                const Text('Sign in with Apple',
+                Text('signInWithApple'.tr(),
                     style: TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.w600, fontSize: 14)),
