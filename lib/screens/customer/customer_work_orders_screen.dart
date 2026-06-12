@@ -2,11 +2,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import '../../models/work_order.dart';
+import '../../models/weekly_invoice.dart';
 import '../../services/work_order_service.dart';
+import '../../services/weekly_invoice_service.dart';
 import 'work_order_payment_screen.dart';
+import 'weekly_invoice_screen.dart';
 import '../review_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
@@ -119,9 +123,10 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               WorkOrderStatus.disputed,
             ].contains(o.status)).toList();
 
-            final paymentDue = all
-                .where((o) => o.status == WorkOrderStatus.paymentDue)
-                .toList();
+            // Tab 2: hodiny schválené (čaká na výber platby) + paymentDue
+            final paymentDue = all.where((o) =>
+                o.status == WorkOrderStatus.paymentDue ||
+                o.status == WorkOrderStatus.hoursApproved).toList();
 
             final history = all.where((o) => [
               WorkOrderStatus.paid, WorkOrderStatus.completed,
@@ -174,7 +179,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
         o.craftsmanSnapshot?['name'] ?? 'craftsman'.tr();
     final craftsmanImage =
         o.craftsmanSnapshot?['profileImage'] as String?;
-    // Safely translate profession key
     final profLabel = o.profession != null
         ? (o.profession!.startsWith('prof_')
             ? o.profession!.tr()
@@ -207,7 +211,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(20))),
           child: Row(children: [
-            // Avatar
             Container(
               width: 42, height: 42,
               decoration: BoxDecoration(
@@ -221,7 +224,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                       child: const Icon(Icons.handyman,
                           size: 18, color: _kPrimary)))),
             const SizedBox(width: 10),
-            // Name + date — Expanded to prevent overflow
             Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -241,7 +243,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               ]),
             ])),
             const SizedBox(width: 8),
-            // Status badge — fixed width to prevent overflow
             _statusBadge(o.status),
           ])),
 
@@ -251,7 +252,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-            // Profession chip
             if (profLabel != null)
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -269,7 +269,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                       fontWeight: FontWeight.w600)),
                 ])),
 
-            // Description
             if (o.description != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -285,7 +284,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                         color: Colors.grey.shade700, height: 1.4))),
             ],
 
-            // Address
             if (o.address != null) ...[
               const SizedBox(height: 6),
               Row(children: [
@@ -304,9 +302,10 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               const SizedBox(height: 12),
               _hoursCard(o),
               const SizedBox(height: 10),
+              // ✅ NOVÉ: Schváliť hodiny → zobrazí dialóg výberu platby
               _gradientBtn(label: 'approveHours'.tr(),
                   icon: Icons.check_circle_outline,
-                  onTap: () => _confirmHours(o)),
+                  onTap: () => _showPaymentChoiceDialog(o)),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(child: _outlineBtn(
@@ -319,6 +318,21 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                     icon: Icons.flag_outlined, color: Colors.red,
                     onTap: () => _showRejectInfoDialog(o))),
               ]),
+            ],
+
+            // ── HOURS APPROVED — zákazník si vybral súhrnnú platbu ────
+            if (o.status == WorkOrderStatus.hoursApproved) ...[
+              const SizedBox(height: 12),
+              _hoursCard(o),
+              const SizedBox(height: 8),
+              _alertBox(
+                color: Colors.teal,
+                icon: Icons.schedule_rounded,
+                title: 'hoursApproved_title'.tr(),
+                text: o.paymentMode == PaymentMode.weekly
+                    ? 'invoiceIncluded_weeklyText'.tr()
+                    : 'invoiceIncluded_biweeklyText'.tr(),
+              ),
             ],
 
             // ── REWORK REQUESTED ──────────────────────────────────────
@@ -362,8 +376,9 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               ]),
             ],
 
-            // ── PAYMENT DUE ───────────────────────────────────────────
-            if (o.status == WorkOrderStatus.paymentDue) ...[
+            // ── PAYMENT DUE — okamžitá platba ─────────────────────────
+            if (o.status == WorkOrderStatus.paymentDue &&
+                o.weeklyInvoiceId == null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -398,6 +413,34 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                 onTap: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) =>
                         WorkOrderPaymentScreen(order: o)))),
+            ],
+
+            // ── PAYMENT DUE — súhrnná faktúra ─────────────────────────
+            if (o.status == WorkOrderStatus.paymentDue &&
+                o.weeklyInvoiceId != null) ...[
+              const SizedBox(height: 12),
+              _alertBox(
+                color: _kPrimary,
+                icon: Icons.receipt_long_outlined,
+                title: 'invoiceIncluded_title'.tr(),
+                text: 'invoiceIncluded_text'.tr(),
+              ),
+              const SizedBox(height: 8),
+              _gradientBtn(
+                label: 'invoice_view_pay_btn'.tr(),
+                icon: Icons.payment_outlined,
+                onTap: () => _openWeeklyInvoice(o.weeklyInvoiceId!)),
+            ],
+
+            // ── HOURS APPROVED — súhrnná faktúra (čaká) ──────────────
+            if (o.status == WorkOrderStatus.hoursApproved &&
+                o.weeklyInvoiceId != null) ...[
+              const SizedBox(height: 8),
+              _gradientBtn(
+                label: 'invoice_view_btn'.tr(),
+                icon: Icons.receipt_long_outlined,
+                color: Colors.teal,
+                onTap: () => _openWeeklyInvoice(o.weeklyInvoiceId!)),
             ],
 
             // ── DISPUTED ──────────────────────────────────────────────
@@ -467,6 +510,205 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             const SizedBox(height: 14),
           ])),
       ]));
+  }
+
+  // ── NOVÝ DIALÓG: Výber spôsobu platby ─────────────────────────────────────
+  Future<void> _showPaymentChoiceDialog(WorkOrder o) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 20),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2))),
+
+          // Titulok
+          Text('approveHours'.tr(),
+              style: const TextStyle(fontSize: 20,
+                  fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          const SizedBox(height: 6),
+          Text(
+            '${o.loggedHours?.toStringAsFixed(1)} h '
+            '× ${o.hourlyRate?.toStringAsFixed(0)} €/h '
+            '= ${o.calculatedTotal?.toStringAsFixed(2)} €',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+          const SizedBox(height: 24),
+
+          // Možnosť 1: Zaplatiť hneď
+          _paymentOptionTile(
+            icon: Icons.payment_outlined,
+            color: _kPrimary,
+            title: 'paymentChoice_immediate_title'.tr(),
+            subtitle: 'paymentChoice_immediate_subtitle'.tr(),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await WorkOrderService.approveAndPayNow(o.id);
+              if (mounted) {
+                Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => WorkOrderPaymentScreen(order: o.copyWith(
+                      status: WorkOrderStatus.paymentDue,
+                      paymentMode: PaymentMode.immediate,
+                    ))));
+              }
+            }),
+          const SizedBox(height: 10),
+
+          // Možnosť 2: Týždenná faktúra
+          _paymentOptionTile(
+            icon: Icons.calendar_view_week_outlined,
+            color: Colors.teal,
+            title: 'paymentChoice_weekly_title'.tr(),
+            subtitle: 'paymentChoice_weekly_subtitle'.tr(),
+            badge: 'paymentChoice_recommended_badge'.tr(),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await _approveAndAddToInvoice(o, InvoicePeriod.weekly);
+            }),
+          const SizedBox(height: 10),
+
+          // Možnosť 3: Dvojtýždenná faktúra
+          _paymentOptionTile(
+            icon: Icons.calendar_month_outlined,
+            color: Colors.indigo,
+            title: 'paymentChoice_biweekly_title'.tr(),
+            subtitle: 'paymentChoice_biweekly_subtitle'.tr(),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await _approveAndAddToInvoice(o, InvoicePeriod.biweekly);
+            }),
+          const SizedBox(height: 8),
+        ])));
+  }
+
+  Widget _paymentOptionTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    String? badge,
+  }) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.25))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: color, size: 22)),
+        const SizedBox(width: 14),
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          if (badge != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.teal,
+                  borderRadius: BorderRadius.circular(6)),
+                child: Text(badge, style: const TextStyle(
+                    color: Colors.white, fontSize: 9,
+                    fontWeight: FontWeight.bold)))),
+          Text(title, style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 14,
+              color: Color(0xFF1E293B))),
+          const SizedBox(height: 3),
+          Text(subtitle, style: TextStyle(
+              fontSize: 12, color: Colors.grey.shade600)),
+        ])),
+        const SizedBox(width: 4),
+        Icon(Icons.chevron_right, color: color.withOpacity(0.5)),
+      ])));
+
+  // ── Otvor súhrnnú faktúru podľa ID ────────────────────────────────────────
+  Future<void> _openWeeklyInvoice(String invoiceId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('weekly_invoices')
+          .doc(invoiceId)
+          .get();
+
+      if (!doc.exists) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('invoice_not_found'.tr()),      // ✅ opravené: odstránené const
+            backgroundColor: Colors.red));
+        return;
+      }
+
+      final invoice = WeeklyInvoice.fromFirestore(doc);
+
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(
+            builder: (_) => WeeklyInvoiceScreen(invoice: invoice)));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('errorWithMessage'.tr(namedArgs: {'error': '$e'})),
+          backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _approveAndAddToInvoice(
+      WorkOrder o, InvoicePeriod period) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      // 1. Nastav paymentMode na zákazke
+      await WorkOrderService.approveAndAddToInvoice(o.id, period);
+
+      // 2. Vytvor alebo aktualizuj faktúru
+      final invoice = await WeeklyInvoiceService.createOrUpdate(
+        customerId: o.customerId,
+        craftsmanId: o.craftsmanId,
+        orders: [o],
+        period: period,
+        customerSnapshot: o.customerSnapshot,
+        craftsmanSnapshot: o.craftsmanSnapshot,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            period == InvoicePeriod.weekly
+                ? 'invoice_added_weekly_snack'.tr()
+                : 'invoice_added_biweekly_snack'.tr()),
+          backgroundColor: Colors.teal,
+          action: SnackBarAction(
+            label: 'invoice_view_btn'.tr(),
+            textColor: Colors.white,
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) =>
+                    WeeklyInvoiceScreen(invoice: invoice))),
+          )));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('errorWithMessage'.tr(namedArgs: {'error': '$e'})),
+          backgroundColor: Colors.red));
+    }
   }
 
   // ── Hours card ─────────────────────────────────────────────────────────────
@@ -545,7 +787,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               size: 13, color: _kPrimary)),
         const SizedBox(width: 8),
         Text('supportContact'.tr(),
-            style: TextStyle(fontSize: 12,
+            style: const TextStyle(fontSize: 12,
                 fontWeight: FontWeight.bold, color: _kPrimary)),
       ]),
       const SizedBox(height: 8),
@@ -569,13 +811,6 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
     ]));
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  Future<void> _confirmHours(WorkOrder o) async {
-    await WorkOrderService.confirmHours(o.id);
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('hoursConfirmed'.tr()),
-        backgroundColor: Colors.green));
-  }
-
   Future<void> _showReworkDialog(WorkOrder o) async {
     final ctrl = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -789,7 +1024,8 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
           ]))));
 
     if (confirmed == true && mounted) {
-      await WorkOrderService.acceptDespiteInsistence(o.id);
+      // Zobraz dialóg výberu platby namiesto okamžitého paymentDue
+      await _showPaymentChoiceDialog(o);
     }
   }
 
@@ -986,6 +1222,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
       WorkOrderStatus.confirmed:          (_kPrimary,          'confirmed'),
       WorkOrderStatus.inProgress:         (Colors.purple,      'workOrders_tab_active'),
       WorkOrderStatus.hoursLogged:        (Colors.teal,        'customerOrders_tab_hours'),
+      WorkOrderStatus.hoursApproved:      (Colors.teal,        'workOrders_hours_approved_badge'),
       WorkOrderStatus.reworkRequested:    (Colors.orange,      'reworkRequested_title'),
       WorkOrderStatus.craftsmanInsisting: (Colors.red,         'craftsmanInsistingNote'),
       WorkOrderStatus.disputed:           (Colors.red.shade700,'disputed_title'),
@@ -996,7 +1233,14 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
     };
     final entry = cfg[status];
     final color = entry?.$1 ?? Colors.grey;
-    final label = entry != null ? entry.$2.tr() : '?';
+    final rawLabel = entry?.$2 ?? '?';
+    // Niektoré hodnoty sú translation keys, iné sú priame stringy
+    String label;
+    try {
+      label = rawLabel.tr();
+    } catch (_) {
+      label = rawLabel;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(

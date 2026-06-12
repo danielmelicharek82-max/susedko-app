@@ -126,6 +126,7 @@ class _WorkOrderList extends StatelessWidget {
       case WorkOrderStatus.confirmed:          return _kPrimary;
       case WorkOrderStatus.inProgress:         return Colors.blue;
       case WorkOrderStatus.hoursLogged:        return Colors.purple;
+      case WorkOrderStatus.hoursApproved:      return Colors.teal;   // ← NOVÉ
       case WorkOrderStatus.reworkRequested:    return Colors.orange;
       case WorkOrderStatus.craftsmanInsisting: return Colors.red;
       case WorkOrderStatus.disputed:           return Colors.red;
@@ -142,6 +143,7 @@ class _WorkOrderList extends StatelessWidget {
       case WorkOrderStatus.confirmed:          return 'Potvrdená';
       case WorkOrderStatus.inProgress:         return 'Prebieha';
       case WorkOrderStatus.hoursLogged:        return 'Hodiny zadané';
+      case WorkOrderStatus.hoursApproved:      return 'Hodiny schválené'; // ← NOVÉ
       case WorkOrderStatus.reworkRequested:    return 'Žiadosť o úpravu';
       case WorkOrderStatus.craftsmanInsisting: return 'Nezhoda';
       case WorkOrderStatus.disputed:           return 'Spor ⚠️';
@@ -185,7 +187,6 @@ class _WorkOrderList extends StatelessWidget {
                   color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2)))),
 
-            // Hlavička
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
@@ -212,7 +213,6 @@ class _WorkOrderList extends StatelessWidget {
             ]),
             const SizedBox(height: 20),
 
-            // Zákazník
             _ContactSection(
               title: 'Zákazník',
               icon: Icons.person_outline,
@@ -224,7 +224,6 @@ class _WorkOrderList extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Remeselník
             _ContactSection(
               title: 'Remeselník',
               icon: Icons.handyman_outlined,
@@ -236,7 +235,6 @@ class _WorkOrderList extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Detail zákazky
             _DetailSection(children: [
               if (w.description != null && w.description!.isNotEmpty)
                 _DetailRow(label: 'Popis', value: w.description!),
@@ -250,6 +248,16 @@ class _WorkOrderList extends StatelessWidget {
               if (w.calculatedTotal != null)
                 _DetailRow(label: 'Suma',
                     value: '${w.calculatedTotal!.toStringAsFixed(2)} €'),
+              if (w.weeklyInvoiceId != null)
+                _DetailRow(label: 'Faktúra ID',
+                    value: w.weeklyInvoiceId!),
+              if (w.paymentMode != null)
+                _DetailRow(label: 'Typ platby',
+                    value: w.paymentMode == PaymentMode.immediate
+                        ? 'Okamžitá'
+                        : w.paymentMode == PaymentMode.weekly
+                            ? 'Týždenná faktúra'
+                            : 'Dvojtýždenná faktúra'),
               if (w.disputeNote != null && w.disputeNote!.isNotEmpty)
                 _DetailRow(label: 'Poznámka (spor)',
                     value: w.disputeNote!, isAlert: true),
@@ -385,7 +393,6 @@ class _WorkOrderList extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                // Header row
                 Row(children: [
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -408,7 +415,6 @@ class _WorkOrderList extends StatelessWidget {
                 ]),
                 const SizedBox(height: 10),
 
-                // Zákazník
                 _ContactRow(
                   icon: Icons.person_outline,
                   color: _kPrimary,
@@ -419,7 +425,6 @@ class _WorkOrderList extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
 
-                // Remeselník
                 _ContactRow(
                   icon: Icons.handyman_outlined,
                   color: Colors.orange,
@@ -459,6 +464,12 @@ class _WorkOrderList extends StatelessWidget {
                     Icon(Icons.timer_outlined, size: 12, color: Colors.grey.shade400),
                     Text(' ${w.loggedHours}h  ',
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  ],
+                  if (w.weeklyInvoiceId != null) ...[
+                    Icon(Icons.receipt_long_outlined,
+                        size: 12, color: Colors.teal.shade400),
+                    Text(' Faktúra  ',
+                        style: TextStyle(fontSize: 11, color: Colors.teal.shade600)),
                   ],
                   const Spacer(),
                   Text(

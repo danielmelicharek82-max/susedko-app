@@ -3,23 +3,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum WorkOrderStatus {
-  pending,           // zákazník vytvoril, čaká na potvrdenie remeselníka
-  confirmed,         // remeselník potvrdil
-  inProgress,        // práca prebieha
-  hoursLogged,       // remeselník zadal hodiny, čaká na potvrdenie zákazníka
-  reworkRequested,   // zákazník žiada prepracovanie / úpravu hodín
-  craftsmanInsisting,// remeselník trvá na pôvodných hodinách → potenciálny spor
-  disputed,          // zákazník potvrdil spor → admin rieši
-  paymentDue,        // zákazník potvrdil hodiny, čaká na platbu
-  paid,              // zaplatené
-  completed,         // dokončené + zaplatené
-  cancelled,         // zrušené
+  pending,            // zákazník vytvoril, čaká na potvrdenie remeselníka
+  confirmed,          // remeselník potvrdil
+  inProgress,         // práca prebieha
+  hoursLogged,        // remeselník zadal hodiny, čaká na potvrdenie zákazníka
+  hoursApproved,      // zákazník schválil hodiny — čaká na platbu (okamžitú alebo súhrnnú)
+  reworkRequested,    // zákazník žiada prepracovanie / úpravu hodín
+  craftsmanInsisting, // remeselník trvá na pôvodných hodinách → potenciálny spor
+  disputed,           // zákazník potvrdil spor → admin rieši
+  paymentDue,         // vybraná okamžitá platba alebo súhrnná faktúra vygenerovaná
+  paid,               // zaplatené
+  completed,          // dokončené + zaplatené
+  cancelled,          // zrušené
 }
 
 enum WorkOrderPaymentStatus {
   unpaid,
+  approved,   // hodiny schválené, čaká na platbu
   paid,
   refunded,
+}
+
+// Typ platby ktorý zákazník zvolí po schválení hodín
+enum PaymentMode {
+  immediate,  // zaplatiť hneď
+  weekly,     // pridať do týždennej faktúry
+  biweekly,   // pridať do dvojtýždennej faktúry
 }
 
 class WorkOrder {
@@ -53,10 +62,15 @@ class WorkOrder {
   final WorkOrderPaymentStatus paymentStatus;
   final String? paymentIntentId;
 
+  // Nové polia pre súhrnné platby
+  final PaymentMode? paymentMode;
+  final String? weeklyInvoiceId; // ID súhrnnej faktúry ak je súčasťou
+
   final WorkOrderStatus status;
   final bool isReviewed;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final DateTime? hoursApprovedAt; // kedy zákazník schválil hodiny
 
   WorkOrder({
     required this.id,
@@ -82,10 +96,13 @@ class WorkOrder {
     this.craftsmanInsistNote,
     this.paymentStatus = WorkOrderPaymentStatus.unpaid,
     this.paymentIntentId,
+    this.paymentMode,
+    this.weeklyInvoiceId,
     this.status = WorkOrderStatus.pending,
     this.isReviewed = false,
     required this.createdAt,
     this.completedAt,
+    this.hoursApprovedAt,
   });
 
   double? get calculatedTotal {
@@ -97,7 +114,10 @@ class WorkOrder {
   }
 
   bool get isPaid => paymentStatus == WorkOrderPaymentStatus.paid;
-  bool get needsPayment => status == WorkOrderStatus.paymentDue && !isPaid;
+  bool get needsPayment =>
+      status == WorkOrderStatus.paymentDue && !isPaid;
+  bool get isAwaitingPaymentChoice =>
+      status == WorkOrderStatus.hoursApproved && weeklyInvoiceId == null;
 
   Map<String, dynamic> toMap() => {
     'customerId':          customerId,
@@ -122,11 +142,15 @@ class WorkOrder {
     'craftsmanInsistNote': craftsmanInsistNote,
     'paymentStatus':       paymentStatus.name,
     'paymentIntentId':     paymentIntentId,
+    'paymentMode':         paymentMode?.name,
+    'weeklyInvoiceId':     weeklyInvoiceId,
     'status':              status.name,
     'isReviewed':          isReviewed,
     'createdAt':           Timestamp.fromDate(createdAt),
     'completedAt':         completedAt != null
         ? Timestamp.fromDate(completedAt!) : null,
+    'hoursApprovedAt':     hoursApprovedAt != null
+        ? Timestamp.fromDate(hoursApprovedAt!) : null,
   };
 
   factory WorkOrder.fromFirestore(DocumentSnapshot doc) {
@@ -162,6 +186,12 @@ class WorkOrder {
           (e) => e.name == map['paymentStatus'],
           orElse: () => WorkOrderPaymentStatus.unpaid),
       paymentIntentId: map['paymentIntentId'],
+      paymentMode: map['paymentMode'] != null
+          ? PaymentMode.values.firstWhere(
+              (e) => e.name == map['paymentMode'],
+              orElse: () => PaymentMode.immediate)
+          : null,
+      weeklyInvoiceId: map['weeklyInvoiceId'],
       status: WorkOrderStatus.values.firstWhere(
           (e) => e.name == map['status'],
           orElse: () => WorkOrderStatus.pending),
@@ -169,10 +199,11 @@ class WorkOrder {
       createdAt:     (map['createdAt'] as Timestamp).toDate(),
       completedAt:   map['completedAt'] != null
           ? (map['completedAt'] as Timestamp).toDate() : null,
+      hoursApprovedAt: map['hoursApprovedAt'] != null
+          ? (map['hoursApprovedAt'] as Timestamp).toDate() : null,
     );
   }
 
-  // ✅ FIX: pridané customerSnapshot + craftsmanSnapshot
   WorkOrder copyWith({
     WorkOrderStatus? status,
     WorkOrderPaymentStatus? paymentStatus,
@@ -186,8 +217,11 @@ class WorkOrder {
     String? reworkNote,
     String? craftsmanInsistNote,
     String? paymentIntentId,
+    PaymentMode? paymentMode,
+    String? weeklyInvoiceId,
     bool? isReviewed,
     DateTime? completedAt,
+    DateTime? hoursApprovedAt,
   }) {
     return WorkOrder(
       id: id, customerId: customerId, craftsmanId: craftsmanId,
@@ -206,10 +240,13 @@ class WorkOrder {
       craftsmanInsistNote: craftsmanInsistNote  ?? this.craftsmanInsistNote,
       paymentStatus:       paymentStatus        ?? this.paymentStatus,
       paymentIntentId:     paymentIntentId      ?? this.paymentIntentId,
+      paymentMode:         paymentMode          ?? this.paymentMode,
+      weeklyInvoiceId:     weeklyInvoiceId      ?? this.weeklyInvoiceId,
       status:              status               ?? this.status,
       isReviewed:          isReviewed           ?? this.isReviewed,
       createdAt:           createdAt,
       completedAt:         completedAt          ?? this.completedAt,
+      hoursApprovedAt:     hoursApprovedAt      ?? this.hoursApprovedAt,
     );
   }
 }

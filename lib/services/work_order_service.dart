@@ -2,6 +2,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/work_order.dart';
+import '../models/weekly_invoice.dart'; // InvoicePeriod
 
 class WorkOrderService {
   static final _db = FirebaseFirestore.instance;
@@ -30,7 +31,6 @@ class WorkOrderService {
     final time = _timeStr(order.scheduledAt);
 
     await _db.runTransaction((tx) async {
-      // ✅ NAJPRV READ (správne)
       final availSnap = await tx.get(availRef);
 
       final data = Map<String, dynamic>.from(
@@ -39,12 +39,10 @@ class WorkOrderService {
 
       final slots = List<String>.from(data[slotKey] ?? []);
 
-      // ❗ SLOT NEEXISTUJE = OBSADENÝ
       if (!slots.contains(time)) {
         throw Exception('SLOT_TAKEN');
       }
 
-      // ✅ odstráň slot (rezervácia)
       slots.remove(time);
 
       if (slots.isEmpty) {
@@ -53,7 +51,6 @@ class WorkOrderService {
         data[slotKey] = slots;
       }
 
-      // ✅ WRITE až po read
       tx.set(orderRef, order.toMap());
       tx.set(availRef, data);
     });
@@ -130,9 +127,46 @@ class WorkOrderService {
     });
   }
 
+  // ── APPROVE HOURS (nové) ──────────────────────────────────────────────────
+  // Zákazník schváli hodiny — zákazka čaká na výber spôsobu platby.
+  // Na rozdiel od confirmHours() NEPRESUNIE zákazku do paymentDue okamžite.
+  static Future<void> approveHours(String id) async {
+    await _db.collection(_col).doc(id).update({
+      'status': WorkOrderStatus.hoursApproved.name,
+      'paymentStatus': WorkOrderPaymentStatus.approved.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── CONFIRM HOURS → okamžitá platba ───────────────────────────────────────
+  // Zachované pre spätnú kompatibilitu + okamžitú platbu
   static Future<void> confirmHours(String id) async {
     await _db.collection(_col).doc(id).update({
       'status': WorkOrderStatus.paymentDue.name,
+      'paymentMode': PaymentMode.immediate.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── SCHVÁLIŤ A NASTAVIŤ OKAMŽITÚ PLATBU ──────────────────────────────────
+  static Future<void> approveAndPayNow(String id) async {
+    await _db.collection(_col).doc(id).update({
+      'status': WorkOrderStatus.paymentDue.name,
+      'paymentMode': PaymentMode.immediate.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── SCHVÁLIŤ A PRIDAŤ DO SÚHRNNEJ FAKTÚRY ────────────────────────────────
+  static Future<void> approveAndAddToInvoice(
+      String id, InvoicePeriod period) async {
+    await _db.collection(_col).doc(id).update({
+      'status': WorkOrderStatus.hoursApproved.name,
+      'paymentMode': period == InvoicePeriod.weekly
+          ? PaymentMode.weekly.name
+          : PaymentMode.biweekly.name,
+      'paymentStatus': WorkOrderPaymentStatus.approved.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -168,7 +202,9 @@ class WorkOrderService {
 
   static Future<void> acceptDespiteInsistence(String id) async {
     await _db.collection(_col).doc(id).update({
-      'status': WorkOrderStatus.paymentDue.name,
+      'status': WorkOrderStatus.hoursApproved.name,
+      'paymentStatus': WorkOrderPaymentStatus.approved.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -217,8 +253,24 @@ class WorkOrderService {
     return _db
         .collection(_col)
         .where('customerId', isEqualTo: customerId)
-        .where('status', isEqualTo: WorkOrderStatus.paymentDue.name)
+        .where('status', whereIn: [
+          WorkOrderStatus.paymentDue.name,
+          WorkOrderStatus.hoursApproved.name,
+        ])
         .snapshots()
         .map((s) => s.docs.length);
+  }
+
+  // Zákazky schválené ale ešte bez priradenia k faktúre
+  static Stream<List<WorkOrder>> watchApprovedWithoutInvoice(
+      String customerId, String craftsmanId) {
+    return _db
+        .collection(_col)
+        .where('customerId', isEqualTo: customerId)
+        .where('craftsmanId', isEqualTo: craftsmanId)
+        .where('status', isEqualTo: WorkOrderStatus.hoursApproved.name)
+        .where('weeklyInvoiceId', isNull: true)
+        .snapshots()
+        .map((s) => s.docs.map(WorkOrder.fromFirestore).toList());
   }
 }

@@ -409,17 +409,8 @@
 			name = LaunchScreen.storyboard;
 			sourceTree = "<group>";
 		};
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = "InfoPlist 2.strings";
-			sourceTree = "<group>";
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = "InfoPlist 3.strings";
-			sourceTree = "<group>";
-		AA000003000000000000003 /* InfoPlist.strings */ = {
+
+AA000003000000000000003 /* InfoPlist.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
 				AA000002000000000000002 /* en */,
