@@ -832,7 +832,7 @@
   "prof_pravnik": "Právnik",
   "prof_uctovnik": "Účtovník",
   "workOrders_disputed_note": "Zákazník uviedol:",
-  "open_requests_screen.dart":"",
+  "open_requests_screen.dart": "",
   "openRequests_subtitle": "Zákazky vo vašich kategóriách",
   "openRequests_empty_desc": "Momentálne nie sú žiadne zákazky vo vašich kategóriách. Skúste neskôr.",
   "openRequests_no_professions_desc": "Pridajte profesie do svojho profilu aby ste videli relevantné zákazky.",
@@ -883,5 +883,7 @@
   "craftsman_hoursApproved_weekly": "Zákazník súhlasil. Platba prebehne v rámci týždennej faktúry.",
   "craftsman_hoursApproved_biweekly": "Zákazník súhlasil. Platba prebehne v rámci dvojtýždennej faktúry.",
   "craftsman_hoursApproved_pending": "Zákazník súhlasil a vyberá spôsob platby.",
-  "craftsman_invoice_included_text": "Zákazník platí v rámci súhrnnej faktúry. Odmenu dostanete po jej úhrade."
+  "craftsman_invoice_included_text": "Zákazník platí v rámci súhrnnej faktúry. Odmenu dostanete po jej úhrade.",
+  "continueAsGuest": "Pokračovať bez registrácie",
+  "signInWithApple": "Prihlásiť sa cez Apple"
 }

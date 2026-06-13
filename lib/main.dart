@@ -44,10 +44,10 @@ import 'screens/admin/admin_users_screen.dart';
 import 'screens/admin/admin_craftsmen_screen.dart';
 import 'screens/admin/admin_reviews_screen.dart';
 
-// ─── Models ───────────────────────────────────────────────────────────────────
+// ─── Models ───────────────────────────────────────────────────────
 import 'models/weekly_invoice.dart';
 
-// ─── Services ─────────────────────────────────────────────────────────────────
+// ─── Services ─────────────────────────────────────────────────
 import 'services/weekly_invoice_service.dart';
 
 // ─── Providers ───────────────────────────────────────────────────────────────
@@ -56,7 +56,6 @@ import 'providers/review_provider.dart';
 import 'providers/admin_provider.dart';
 import 'providers/craftsman_provider.dart';
 import 'providers/geo_provider.dart';
-import 'providers/locale_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/wishlist_provider.dart';
 
@@ -105,7 +104,6 @@ String? _buildPayload(Map<String, dynamic> data) {
 void _handleNotificationTap(String? payload) {
   if (payload == null) return;
   if (payload.startsWith('weekly_invoice:')) {
-    // Presmeruj na zákazky — faktúra sa zobrazí tam
     navigatorKey.currentState?.pushNamed('/customer_work_orders');
     return;
   }
@@ -184,97 +182,221 @@ Future<void> saveFcmToken(String uid) async {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await EasyLocalization.ensureInitialized();
-
-try {
-  await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform);
-} catch (e) {
-  if (!e.toString().contains('duplicate-app')) rethrow;
+  // Prvý frame hneď — žiadna čierna obrazovka počas Firebase/init.
+  runApp(const HomieBootstrap());
 }
 
-await FirebaseAppCheck.instance.activate(
-  androidProvider: AndroidProvider.debug,
-  appleProvider: AppleProvider.debug,
-);
+/// Zobrazí loader okamžite, potom spustí plnú aplikáciu po inicializácii.
+class HomieBootstrap extends StatefulWidget {
+  const HomieBootstrap({super.key});
 
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  @override
+  State<HomieBootstrap> createState() => _HomieBootstrapState();
+}
 
-  const bookingsChannel = AndroidNotificationChannel(
-    'bookings_channel', 'Rezervácie',
-    description: 'Notifikácie o rezerváciách termínov',
-    importance: Importance.max);
-  const requestsChannel = AndroidNotificationChannel(
-    'requests_channel', 'Požiadavky',
-    description: 'Notifikácie o nových požiadavkách na služby',
-    importance: Importance.defaultImportance);
-  const chatChannel = AndroidNotificationChannel(
-    'chat_channel', 'Správy',
-    description: 'Správy od remeselníkov a zákazníkov',
-    importance: Importance.high);
-  const workOrdersChannel = AndroidNotificationChannel(
-    'work_orders_channel', 'Objednávky práce',
-    description: 'Notifikácie o objednávkach a platbách',
-    importance: Importance.max);
-  const invoicesChannel = AndroidNotificationChannel(
-    'invoices_channel', 'Faktúry',
-    description: 'Notifikácie o súhrnných faktúrach',
-    importance: Importance.max);
+class _HomieBootstrapState extends State<HomieBootstrap> {
+  Widget? _app;
+  String? _initError;
 
-  for (final channel in [
-    bookingsChannel, requestsChannel, chatChannel,
-    workOrdersChannel, invoicesChannel,
-  ]) {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
   }
 
-  await flutterLocalNotificationsPlugin.initialize(
-    const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher')),
-    onDidReceiveNotificationResponse: (details) =>
-        _handleNotificationTap(details.payload));
+  Future<void> _initialize() async {
+    try {
+      await EasyLocalization.ensureInitialized();
 
-  Stripe.publishableKey =
-      'pk_live_51T4hLc7rtEYv7RoYDCNH4tQMorAiu0TIPdLj2hX8C8xSHzZ8dW4gQSh1sNL1LKrtQXrJOQV3vvz4VKY8JucsdYiu00hwuSt7Q3';
+      try {
+        await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform);
+      } catch (e) {
+        if (!e.toString().contains('duplicate-app')) rethrow;
+      }
 
-  final systemLocale =
-      WidgetsBinding.instance.platformDispatcher.locale;
-  final startLocale =
-      _supportedLocaleCodes.contains(systemLocale.languageCode)
-          ? Locale(systemLocale.languageCode)
-          : const Locale('en');
+      try {
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: AndroidProvider.debug,
+          appleProvider: AppleProvider.debug,
+        );
+      } catch (e) {
+        debugPrint('Firebase App Check: $e');
+      }
 
-  runApp(
-    EasyLocalization(
-      supportedLocales: _supportedLocales,
-      path: 'assets/translations',
-      fallbackLocale: const Locale('sk'),
-      startLocale: startLocale,
-      saveLocale: false,
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(
-              create: (_) => LocaleProvider(), lazy: false),
-          ChangeNotifierProvider(
-              create: (_) => ReviewProvider(), lazy: true),
-          ChangeNotifierProvider(
-              create: (_) => AdminProvider(), lazy: true),
-          ChangeNotifierProvider(
-              create: (_) => CraftsmanProvider(), lazy: true),
-          ChangeNotifierProvider(
-              create: (_) => GeoProvider(), lazy: true),
-          ChangeNotifierProvider(
-              create: (_) => ChatProvider(), lazy: true),
-          ChangeNotifierProvider(
-              create: (_) => WishlistProvider(), lazy: true),
-        ],
-        child: const HomieApp(),
+      FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler);
+
+      const bookingsChannel = AndroidNotificationChannel(
+          'bookings_channel', 'Rezervácie',
+          description: 'Notifikácie o rezerváciách termínov',
+          importance: Importance.max);
+      const requestsChannel = AndroidNotificationChannel(
+          'requests_channel', 'Požiadavky',
+          description: 'Notifikácie o nových požiadavkách na služby',
+          importance: Importance.defaultImportance);
+      const chatChannel = AndroidNotificationChannel(
+          'chat_channel', 'Správy',
+          description: 'Správy od remeselníkov a zákazníkov',
+          importance: Importance.high);
+      const workOrdersChannel = AndroidNotificationChannel(
+          'work_orders_channel', 'Objednávky práce',
+          description: 'Notifikácie o objednávkach a platbách',
+          importance: Importance.max);
+
+      for (final channel in [
+        bookingsChannel,
+        requestsChannel,
+        chatChannel,
+        workOrdersChannel,
+      ]) {
+        await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.createNotificationChannel(channel);
+      }
+
+      await flutterLocalNotificationsPlugin.initialize(
+        const InitializationSettings(
+            android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+            iOS: DarwinInitializationSettings()),
+        onDidReceiveNotificationResponse: (details) =>
+            _handleNotificationTap(details.payload),
+      );
+
+      Stripe.publishableKey =
+          'pk_test_51T4hLc7rtEYv7RoYZsJradFs3GS7K5iqnbua9eDquWNB0SWi5lBBLIY1H7m7ovNJqheROrA3iHuyn6KfhgZikSvf003veJdyZT';
+      try {
+        await Stripe.instance.applySettings();
+      } catch (e) {
+        debugPrint('Stripe applySettings: $e');
+      }
+
+      final systemLocale =
+          WidgetsBinding.instance.platformDispatcher.locale;
+      final startLocale =
+          _supportedLocaleCodes.contains(systemLocale.languageCode)
+              ? Locale(systemLocale.languageCode)
+              : const Locale('en');
+
+      if (!mounted) return;
+      setState(() {
+        _app = EasyLocalization(
+          supportedLocales: _supportedLocales,
+          path: 'assets/translations',
+          fallbackLocale: const Locale('sk'),
+          startLocale: startLocale,
+          saveLocale: false,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider(
+                  create: (_) => LocaleProvider(), lazy: false),
+              ChangeNotifierProvider(
+                  create: (_) => ReviewProvider(), lazy: true),
+              ChangeNotifierProvider(
+                  create: (_) => AdminProvider(), lazy: true),
+              ChangeNotifierProvider(
+                  create: (_) => CraftsmanProvider(), lazy: true),
+              ChangeNotifierProvider(
+                  create: (_) => GeoProvider(), lazy: true),
+              ChangeNotifierProvider(
+                  create: (_) => ChatProvider(), lazy: true),
+              ChangeNotifierProvider(
+                  create: (_) => WishlistProvider(), lazy: true),
+            ],
+            child: const HomieApp(),
+          ),
+        );
+      });
+    } catch (e, st) {
+      debugPrint('Homie init failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _initError = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_initError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: const Color(0xFFF0F4FF),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 48, color: Color(0xFF2563EB)),
+                  const SizedBox(height: 16),
+                  const Text('Chyba pri štarte aplikácie',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(_initError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13)),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: () {
+                      setState(() {
+                        _initError = null;
+                        _app = null;
+                      });
+                      _initialize();
+                    },
+                    child: const Text('Skúsiť znova'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_app == null) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: _StartupLoadingScreen(),
+      );
+    }
+
+    return _app!;
+  }
+}
+
+class _StartupLoadingScreen extends StatelessWidget {
+  const _StartupLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Color(0xFFF0F4FF),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.handyman, size: 64, color: Color(0xFF2563EB)),
+            SizedBox(height: 28),
+            CircularProgressIndicator(color: Color(0xFF2563EB)),
+            SizedBox(height: 16),
+            Text(
+              'Načítavam Susedko…',
+              style: TextStyle(
+                color: Color(0xFF2563EB),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -347,9 +469,13 @@ class _HomieAppState extends State<HomieApp> {
       supportedLocales: context.supportedLocales,
       localizationsDelegates: context.localizationDelegates,
       theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF0F4FF),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF2563EB),
-          primary: const Color(0xFF2563EB)),
+          primary: const Color(0xFF2563EB),
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
       ),
       builder: (context, child) => MediaQuery(
@@ -365,10 +491,10 @@ class _HomieAppState extends State<HomieApp> {
 
         // ── Craftsman ─────────────────────────────────────────────────────
         '/craftsman_work_orders': (_) => const CraftsmanWorkOrdersScreen(),
-        '/craftsman_requests':    (_) => const CraftsmanRequestsScreen(),
-        '/craftsman_calendar':    (_) => const CraftsmanCalendarScreen(),
-        '/craftsman_portfolio':   (_) => const CraftsmanPortfolioScreen(),
-        '/craftsman_profile':     (_) => const CraftsmanProfileScreen(),
+        '/craftsman_requests':  (_) => const CraftsmanRequestsScreen(),
+        '/craftsman_calendar':  (_) => const CraftsmanCalendarScreen(),
+        '/craftsman_portfolio': (_) => const CraftsmanPortfolioScreen(),
+        '/craftsman_profile':   (_) => const CraftsmanProfileScreen(),
 
         // ── Admin ─────────────────────────────────────────────────────────
         '/admin_home':      (_) => AdminHomeScreen(),
@@ -382,17 +508,49 @@ class _HomieAppState extends State<HomieApp> {
 }
 
 // ─── Auth Gate ────────────────────────────────────────────────────────────────
-class _AuthGate extends StatelessWidget {
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _authTimedOut = false;
+  Key _authStreamKey = UniqueKey();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted) setState(() => _authTimedOut = true);
+    });
+  }
+
+  void _retryAuth() {
+    setState(() {
+      _authTimedOut = false;
+      _authStreamKey = UniqueKey();
+    });
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted) setState(() => _authTimedOut = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
+      key: _authStreamKey,
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) {
         if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-              body: Center(child: CircularProgressIndicator()));
+          return _AuthLoadingScreen(
+            message: _authTimedOut
+                ? 'Firebase Auth neodpovedá.\nSkontroluj internet a reštartuj app (R).'
+                : 'Overujem prihlásenie…',
+            showRetry: _authTimedOut,
+            onRetry: _retryAuth,
+          );
         }
         final user = authSnapshot.data;
         if (user == null) return const LoginScreen();
@@ -402,8 +560,8 @@ class _AuthGate extends StatelessWidget {
               .collection('users').doc(user.uid).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()));
+              return const _AuthLoadingScreen(
+                  message: 'Načítavam profil…');
             }
             if (!snapshot.hasData ||
                 !snapshot.data!.exists ||
@@ -435,5 +593,51 @@ class _AuthGate extends StatelessWidget {
             }
           });
       });
+  }
+}
+
+class _AuthLoadingScreen extends StatelessWidget {
+  const _AuthLoadingScreen({
+    this.message = 'Načítavam…',
+    this.showRetry = false,
+    this.onRetry,
+  });
+
+  final String message;
+  final bool showRetry;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F4FF),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF2563EB)),
+              const SizedBox(height: 20),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF1E293B),
+                  fontSize: 15,
+                ),
+              ),
+              if (showRetry && onRetry != null) ...[
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: onRetry,
+                  child: const Text('Skúsiť znova'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

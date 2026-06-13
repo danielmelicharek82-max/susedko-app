@@ -160,11 +160,9 @@
   "submitReview": "Submit review",
   "reviewSent": "Thank you for your review!",
   "reviewed": "This booking has been reviewed",
-
   "settings": "Settings",
   "language": "Language",
   "selectLanguage": "Select language",
-
   "save": "Save",
   "delete": "Delete",
   "edit": "Edit",
@@ -193,12 +191,10 @@
   "locationDenied": "Location access denied",
   "locationDeniedDesc": "Location access was permanently denied. Please enable it manually:\n\nSettings → Apps → Susedko → Permissions → Location → Allow",
   "detectingLocation": "Detecting your location...",
-
   "craftsmanMap": "Craftsmen map",
   "artistMap": "Craftsmen map",
   "you": "You",
   "myLocation": "My location",
-
   "paymentMethod": "Payment method",
   "pay": "Pay",
   "orderSuccess": "Booking successfully placed!",
@@ -206,47 +202,37 @@
   "errorCreatingPayment": "Error creating payment",
   "errorPayment": "Payment error",
   "errorOrder": "Booking error",
-
   "wishlist": "Wishlist",
   "addToWishlist": "Add to wishlist",
   "removeFromWishlist": "Remove from wishlist",
-
   "shareAppDesc": "Share the app with friends.",
   "terms": "About Susedko",
   "termsDesc": "Read the terms of use of the Susedko platform.",
-
   "logo": "Logo",
   "logoOptional": "Logo (optional)",
   "chooseLogo": "Choose logo",
   "changeLogo": "Change logo",
-
   "isCompany": "Is company?",
   "companyName": "Company name",
   "ico": "Company ID",
   "vatPayer": "VAT payer?",
   "vatNumber": "VAT Number",
   "enterVatNumber": "Enter VAT number",
-
   "bank": "Bank account",
   "bankDesc": "Payments for bookings will be sent to this account.",
   "acceptOrders": "Accept bookings",
-
   "workshop": "My workshop",
   "workshopDesc": "Workshop photos. Customers will see them on your profile. Maximum:",
-
   "active": "Active",
   "draft": "Draft",
   "sold": "Booked",
-
   "yearFounded": "Year founded",
   "companyInfo": "Company info",
-
   "newBookingNotif": "📅 New booking!",
   "bookingConfirmedNotif": "✅ Booking confirmed!",
   "bookingCancelledNotif": "❌ Booking cancelled",
   "newMessageNotif": "💬 New message",
   "newRequestNotif": "🔧 New service request",
-
   "selectStyles": "Select styles",
   "myPortfolio": "My portfolio",
   "noPortfolioPhotos": "No portfolio photos yet",
@@ -269,7 +255,6 @@
   "enableLocation": "Enable location",
   "radius": "Radius",
   "noArtistsFound": "No craftsmen found nearby",
-
   "myProfile": "My profile",
   "profileSaved": "Profile saved",
   "saveProfile": "Save profile",
@@ -336,7 +321,6 @@
   "calendar_reject_btn": "Decline",
   "calendar_rejected_snack": "Booking declined",
   "calendar_notif_confirm": "The customer will receive a confirmation notification.",
-
   "workOrders_title": "Work orders",
   "workOrders_tab_active": "New / Active",
   "workOrders_tab_hours": "Hours",
@@ -368,7 +352,6 @@
   "workOrders_insist_snack": "Customer has been notified. Waiting for their decision.",
   "workOrders_insist_reason_required": "Please provide a reason",
   "workOrders_support": "Susedko support:",
-
   "requests_title": "Requests",
   "requests_tab_pending": "Pending",
   "requests_tab_handled": "Handled",
@@ -378,7 +361,6 @@
   "requests_reply_hint": "Reply (optional)",
   "requests_accept_btn": "Accept",
   "requests_reject_btn": "Decline",
-
   "openRequests_title": "Open jobs",
   "openRequests_no_professions": "You have no professions set.\nEdit your profile.",
   "openRequests_empty": "No open jobs\nin your categories",
@@ -393,7 +375,6 @@
   "openRequests_interest_snack": "Interest recorded ✅",
   "openRequests_already_snack": "You have already expressed interest in this request",
   "openRequests_budget": "Budget: {amount} €",
-
   "customerOrders_title": "My orders",
   "customerOrders_tab_active": "Active",
   "customerOrders_tab_hours": "Approve hours",
@@ -404,7 +385,6 @@
   "customerOrders_pay": "Pay {total} €",
   "customerOrders_hours_logged": "{hours} hrs = {total} €",
   "customerOrders_payment_done": "Paid ✅",
-
   "broadcastRequest_title": "Post a request",
   "broadcastRequest_edit_title": "Edit request",
   "broadcastRequest_info": "Your request will be visible to all craftsmen in the selected category. Those interested will contact you and you choose.",
@@ -852,7 +832,7 @@
   "prof_lakyrnik": "Painter (Spray/Paint Finishing)",
   "prof_calunik": "Upholsterer",
   "workOrders_disputed_note": "Customer stated:",
-  "open_requests_screen.dart":"",
+  "open_requests_screen.dart": "",
   "openRequests_subtitle": "Jobs in your categories",
   "openRequests_empty_desc": "There are currently no jobs in your categories. Try again later.",
   "openRequests_no_professions_desc": "Add professions to your profile to see relevant jobs.",
@@ -903,5 +883,7 @@
   "craftsman_hoursApproved_weekly": "Customer agreed. Payment will be processed as part of the weekly invoice.",
   "craftsman_hoursApproved_biweekly": "Customer agreed. Payment will be processed as part of the biweekly invoice.",
   "craftsman_hoursApproved_pending": "Customer agreed and is choosing a payment method.",
-  "craftsman_invoice_included_text": "Customer is paying as part of a summary invoice. You will receive your reward after it's paid."
+  "craftsman_invoice_included_text": "Customer is paying as part of a summary invoice. You will receive your reward after it's paid.",
+  "continueAsGuest": "Continue as guest",
+  "signInWithApple": "Sign in with Apple"
 }
