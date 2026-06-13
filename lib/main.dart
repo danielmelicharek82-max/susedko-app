@@ -265,7 +265,7 @@ class _HomieBootstrapState extends State<HomieBootstrap> {
       );
 
       Stripe.publishableKey =
-          'pk_test_51T4hLc7rtEYv7RoYZsJradFs3GS7K5iqnbua9eDquWNB0SWi5lBBLIY1H7m7ovNJqheROrA3iHuyn6KfhgZikSvf003veJdyZT';
+          'pk_live_51T4hLc7rtEYv7RoYDCNH4tQMorAiu0TIPdLj2hX8C8xSHzZ8dW4gQSh1sNL1LKrtQXrJOQV3vvz4VKY8JucsdYiu00hwuSt7Q3';
       try {
         await Stripe.instance.applySettings();
       } catch (e) {
