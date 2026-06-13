@@ -102,7 +102,6 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: clientSecret,
             merchantDisplayName: _kMerchantName,
-            merchantIdentifier: 'merchant.com.melicharek.susedko',
             style: ThemeMode.system,
             googlePay: PaymentSheetGooglePay(
               merchantCountryCode: 'SK',

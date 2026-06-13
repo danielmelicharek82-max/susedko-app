@@ -85,7 +85,6 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: clientSecret,
             merchantDisplayName: _kMerchantName,
-            merchantIdentifier: 'merchant.com.melicharek.susedko',
             style: ThemeMode.system,
             googlePay: PaymentSheetGooglePay(
               merchantCountryCode: 'SK',
