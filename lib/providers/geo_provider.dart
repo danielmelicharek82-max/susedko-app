@@ -28,11 +28,14 @@ class GeoProvider extends ChangeNotifier {
     notifyListeners();
     final position = await GeoService.getCurrentPosition();
     if (position == null) {
-      _locationDenied = true;
+      final permission = await Geolocator.checkPermission();
+      _locationDenied = permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever;
       _isLoading = false;
       notifyListeners();
       return;
     }
+    _locationDenied = false;
     _currentPosition = position;
     await _loadCraftsmen();
   }
