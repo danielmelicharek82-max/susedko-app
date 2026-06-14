@@ -2,6 +2,34 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string></string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string></string>
+	<key>NSContactsUsageDescription</key>
+	<string></string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string></string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string></string>
+	<key>NSContactsUsageDescription</key>
+	<string></string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleLocalizations</key>
@@ -48,27 +76,6 @@
 
     <key>LSRequiresIPhoneOS</key>
     <true/>
-
-    <key>NSCameraUsageDescription</key>
-    <string>Aplikácia používa kameru na pridávanie fotografií k zákazkám.</string>
-
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Aplikácia potrebuje prístup k fotogalérii na nahrávanie fotografií.</string>
-
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Aplikácia môže ukladať fotografie do vašej galérie.</string>
-
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Aplikácia používa polohu na zobrazenie remeselníkov vo vašom okolí.</string>
-
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Aplikácia môže používať polohu aj na pozadí pre lepšie služby.</string>
-
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Aplikácia potrebuje prístup k mikrofónu pre hlasové správy.</string>
-
-    <key>NSContactsUsageDescription</key>
-    <string>Aplikácia potrebuje prístup ku kontaktom pre jednoduchšie zdieľanie.</string>
 
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
