@@ -85,6 +85,7 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: clientSecret,
             merchantDisplayName: _kMerchantName,
+            returnURL: 'susedko://stripe-redirect',
             style: ThemeMode.system,
             googlePay: PaymentSheetGooglePay(
               merchantCountryCode: 'SK',

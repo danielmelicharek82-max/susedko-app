@@ -106,6 +106,7 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: clientSecret,
             merchantDisplayName: _kMerchantName,
+            returnURL: 'susedko://stripe-redirect',
             style: ThemeMode.system,
             googlePay: PaymentSheetGooglePay(
               merchantCountryCode: 'SK',
