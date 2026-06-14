@@ -53,7 +53,7 @@ dependencies:
   crypto: ^3.0.7
 
   # ─── Platby ────────────────────────────────────────────
-  flutter_stripe: 11.0.0
+  flutter_stripe: ^11.1.0
 
   # ─── Ikony ─────────────────────────────────────────────
   font_awesome_flutter: ^10.7.0

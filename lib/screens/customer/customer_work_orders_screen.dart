@@ -411,7 +411,9 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                 }),
                 icon: Icons.payment_outlined,
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) =>
+                    MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) =>
                         WorkOrderPaymentScreen(order: o)))),
             ],
 

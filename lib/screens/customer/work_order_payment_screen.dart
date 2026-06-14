@@ -1,3 +1,5 @@
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
 // lib/screens/customer/work_order_payment_screen.dart
 //
 // Google Pay compliance:
@@ -100,27 +102,46 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
         await Stripe.instance.presentGooglePay(
           PresentGooglePayParams(clientSecret: clientSecret));
       } else {
-        // Štandardný Payment Sheet (karty + GP ako možnosť)
-        debugPrint('STRIPE iOS: initPaymentSheet...');
-        await Stripe.instance.initPaymentSheet(
-          paymentSheetParameters: SetupPaymentSheetParameters(
-            paymentIntentClientSecret: clientSecret,
-            merchantDisplayName: _kMerchantName,
-            returnURL: 'susedko://stripe-redirect',
-            style: ThemeMode.system,
-            googlePay: PaymentSheetGooglePay(
-              merchantCountryCode: 'SK',
-              currencyCode: 'eur',
-              testEnv: _kGooglePayTestEnv),
-            billingDetailsCollectionConfiguration:
-                const BillingDetailsCollectionConfiguration(
-                    name: CollectionMode.automatic,
-                    email: CollectionMode.automatic),
-          ));
-        debugPrint('STRIPE iOS: presentPaymentSheet...');
-        await Future.delayed(const Duration(milliseconds: 500));
-        await Stripe.instance.presentPaymentSheet();
-        debugPrint('STRIPE iOS: platba uspesna');
+        // iOS: Checkout URL, Android: Payment Sheet
+        debugPrint("PLATFORM: $defaultTargetPlatform");
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          debugPrint('STRIPE iOS: pouzivam Checkout URL');
+          final checkoutResult = await FirebaseFunctions.instance
+              .httpsCallable('createCheckoutSession')
+              .call({
+            'amount': (total * 100).round(),
+            'currency': 'eur',
+            'workOrderId': widget.order.id,
+            'customerId': user.uid,
+            'craftsmanId': widget.order.craftsmanId,
+            'successUrl': 'susedko://payment/success?orderId=${widget.order.id}',
+            'cancelUrl': 'susedko://payment/cancel?orderId=${widget.order.id}',
+          });
+          final checkoutUrl = checkoutResult.data['url'] as String;
+          final uri = Uri.parse(checkoutUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+          return;
+        } else {
+          // Android: Štandardný Payment Sheet
+          await Stripe.instance.initPaymentSheet(
+            paymentSheetParameters: SetupPaymentSheetParameters(
+              paymentIntentClientSecret: clientSecret,
+              merchantDisplayName: _kMerchantName,
+              returnURL: 'susedko://stripe-redirect',
+              style: ThemeMode.system,
+              googlePay: PaymentSheetGooglePay(
+                merchantCountryCode: 'SK',
+                currencyCode: 'eur',
+                testEnv: _kGooglePayTestEnv),
+              billingDetailsCollectionConfiguration:
+                  const BillingDetailsCollectionConfiguration(
+                      name: CollectionMode.automatic,
+                      email: CollectionMode.automatic),
+            ));
+          await Stripe.instance.presentPaymentSheet();
+        }
       }
 
       await WorkOrderService.markPaid(widget.order.id, paymentIntentId);
