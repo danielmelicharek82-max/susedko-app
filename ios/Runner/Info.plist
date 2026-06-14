@@ -3,33 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>The app uses your location to show craftsmen in your area.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string></string>
+	<string>The app can use your location in the background for better service.</string>
 	<key>NSCameraUsageDescription</key>
-	<string></string>
+	<string>The app uses the camera to add photos to orders.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string></string>
+	<string>The app needs access to your photo library to upload photos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string></string>
+	<string>The app can save photos to your gallery.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string></string>
+	<string>The app needs microphone access for voice messages.</string>
 	<key>NSContactsUsageDescription</key>
-	<string></string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string></string>
-	<key>NSCameraUsageDescription</key>
-	<string></string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string></string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string></string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string></string>
-	<key>NSContactsUsageDescription</key>
-	<string></string>
+	<string>The app needs access to contacts for easier sharing.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleLocalizations</key>
