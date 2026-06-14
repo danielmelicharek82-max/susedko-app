@@ -69,7 +69,9 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
 
     setState(() { _paying = true; _error = null; });
     try {
+      debugPrint('STRIPE iOS: zacina platba');
       await user.getIdToken(true);
+      debugPrint('STRIPE iOS: token OK');
 
       final result = await FirebaseFunctions.instance
           .httpsCallable('createPaymentIntent')
@@ -84,6 +86,7 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
         },
       });
 
+      debugPrint('STRIPE iOS: function OK, mam clientSecret');
       final clientSecret    = result.data['clientSecret'] as String;
       final paymentIntentId = result.data['paymentIntentId'] as String;
 
@@ -98,6 +101,7 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
           PresentGooglePayParams(clientSecret: clientSecret));
       } else {
         // Štandardný Payment Sheet (karty + GP ako možnosť)
+        debugPrint('STRIPE iOS: initPaymentSheet...');
         await Stripe.instance.initPaymentSheet(
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: clientSecret,
@@ -112,7 +116,9 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
                     name: CollectionMode.automatic,
                     email: CollectionMode.automatic),
           ));
+        debugPrint('STRIPE iOS: presentPaymentSheet...');
         await Stripe.instance.presentPaymentSheet();
+        debugPrint('STRIPE iOS: platba uspesna');
       }
 
       await WorkOrderService.markPaid(widget.order.id, paymentIntentId);
