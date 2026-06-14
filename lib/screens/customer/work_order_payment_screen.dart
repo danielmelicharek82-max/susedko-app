@@ -117,6 +117,7 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
                     email: CollectionMode.automatic),
           ));
         debugPrint('STRIPE iOS: presentPaymentSheet...');
+        await Future.delayed(const Duration(milliseconds: 500));
         await Stripe.instance.presentPaymentSheet();
         debugPrint('STRIPE iOS: platba uspesna');
       }

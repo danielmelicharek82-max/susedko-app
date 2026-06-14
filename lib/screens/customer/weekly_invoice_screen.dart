@@ -91,6 +91,7 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
               currencyCode: 'eur',
               testEnv: _kGooglePayTestEnv),
           ));
+        await Future.delayed(const Duration(milliseconds: 500));
         await Stripe.instance.presentPaymentSheet();
       }
 
