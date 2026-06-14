@@ -117,6 +117,14 @@
                 <string>com.googleusercontent.apps.329689613080-uhokeseacqe2uleq01ocb11gjukcg41n</string>
             </array>
         </dict>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>susedko</string>
+            </array>
+        </dict>
     </array>
 
     <key>UISupportedInterfaceOrientations</key>
@@ -126,6 +134,7 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+
 
 </dict>
 </plist>
