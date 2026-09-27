@@ -113,7 +113,7 @@ workflows:
             -exportPath $CM_BUILD_DIR/ipa \
             -allowProvisioningUpdates \
             -authenticationKeyPath /tmp/AuthKey.p8 \
-            -authenticationKeyID "S6JD8KBSNV" \
+            -authenticationKeyID "AHP92H277K" \
             -authenticationKeyIssuerID "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             OTHER_CODE_SIGN_FLAGS="--keychain /Users/builder/Library/Keychains/build.keychain-db"
 
@@ -121,7 +121,7 @@ workflows:
         script: |
           app-store-connect publish \
             --path $CM_BUILD_DIR/ipa/susedko.ipa \
-            --key-id "S6JD8KBSNV" \
+            --key-id "AHP92H277K" \
             --issuer-id "08941c62-c68a-462c-9204-4dad33c5bcf0" \
             --private-key @file:/tmp/AuthKey.p8 \
             --testflight
