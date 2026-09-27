@@ -19,7 +19,10 @@ const _kDeep    = Color(0xFF1E40AF);
 const _kAccent  = Color(0xFF60A5FA);
 const _kBg      = Color(0xFFF0F4FF);
 
-const _kGeoApiKey = 'AIzaSyD3GvOCDdd9YuXqecXs-z4eOx6yz1efvow';
+const _kGeoApiKey = 'AIzaSyBXuhp1jKR6dbxhAvOo7_WkX3wSZTAyyNE';
+
+// Max počet profesií na jeden broadcast dopyt.
+const int kMaxBroadcastProfessions = 3;
 
 class BroadcastRequestScreen extends StatefulWidget {
   final ServiceRequest? existingRequest;
@@ -38,7 +41,9 @@ class _BroadcastRequestScreenState
   final _budgetController  = TextEditingController();
   final _addressController = TextEditingController();
 
-  late String _selectedProfession;
+  // Vybrané profesie (1–3). Kategória sa viaže na PRVÚ (primárnu) profesiu
+  // v zozname, aby UI zostalo jednoduché.
+  late List<String> _selectedProfessions;
   late String _selectedCategory;
   String _selectedTimeframe = '1_3_months';
 
@@ -47,28 +52,37 @@ class _BroadcastRequestScreenState
   bool _submitting      = false;
   bool _uploadingImages = false;
 
+  String get _primaryProfession => _selectedProfessions.first;
+
   @override
   void initState() {
     super.initState();
     final r = widget.existingRequest;
     if (r != null) {
-      _selectedProfession =
-          kProfessionCategories.containsKey(r.profession)
-              ? r.profession : kProfessionCategories.keys.first;
+      final existing = r.professions.isNotEmpty
+          ? r.professions
+          : [r.profession];
+      _selectedProfessions = existing
+          .where((p) => kProfessionCategories.containsKey(p))
+          .take(kMaxBroadcastProfessions)
+          .toList();
+      if (_selectedProfessions.isEmpty) {
+        _selectedProfessions = [kProfessionCategories.keys.first];
+      }
       _selectedCategory =
-          kProfessionCategories[_selectedProfession]!
+          kProfessionCategories[_primaryProfession]!
                   .contains(r.category)
               ? r.category
-              : kProfessionCategories[_selectedProfession]!.first;
+              : kProfessionCategories[_primaryProfession]!.first;
       _selectedTimeframe      = r.timeframe;
       _descController.text    = r.description;
       _budgetController.text  = r.budget?.toStringAsFixed(0) ?? '';
       _addressController.text = r.address ?? '';
       _existingUrls.addAll(r.photoUrls);
     } else {
-      _selectedProfession = kProfessionCategories.keys.first;
+      _selectedProfessions = [kProfessionCategories.keys.first];
       _selectedCategory =
-          kProfessionCategories[_selectedProfession]!.first;
+          kProfessionCategories[_primaryProfession]!.first;
     }
   }
 
@@ -80,10 +94,27 @@ class _BroadcastRequestScreenState
     super.dispose();
   }
 
-  void _onProfessionChanged(String p) {
+  void _toggleProfession(String p) {
     setState(() {
-      _selectedProfession = p;
-      _selectedCategory   = kProfessionCategories[p]!.first;
+      if (_selectedProfessions.contains(p)) {
+        // Nedovoľ odznačiť poslednú zostávajúcu profesiu.
+        if (_selectedProfessions.length == 1) return;
+        final wasPrimary = _primaryProfession == p;
+        _selectedProfessions.remove(p);
+        if (wasPrimary) {
+          // Primárna profesia sa zmenila → kategória musí byť platná pre novú.
+          _selectedCategory = kProfessionCategories[_primaryProfession]!.first;
+        }
+      } else {
+        if (_selectedProfessions.length >= kMaxBroadcastProfessions) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('broadcastRequest_profession_max'.tr(
+                  namedArgs: {'max': '$kMaxBroadcastProfessions'})),
+              backgroundColor: Colors.orange));
+          return;
+        }
+        _selectedProfessions.add(p);
+      }
     });
   }
 
@@ -111,7 +142,13 @@ class _BroadcastRequestScreenState
   Future<GeoPoint?> _geocodeAddress(String address) async {
     if (address.trim().isEmpty) return null;
     try {
-      final encoded  = Uri.encodeComponent(address.trim());
+      final addr = address.trim();
+      // Pridaj Slovakia ak tam ešte nie je — Google Maps lepšie nájde slovenské mestá
+      final query = (addr.toLowerCase().contains('slovak') ||
+                     addr.toLowerCase().contains('slovensko'))
+          ? addr
+          : '$addr, Slovakia';
+      final encoded = Uri.encodeComponent(query);
       final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/geocode/json'
         '?address=$encoded&key=$_kGeoApiKey');
@@ -170,7 +207,7 @@ class _BroadcastRequestScreenState
       if (widget.isEditing) {
         await ServiceRequestService.updateBroadcastRequest(
           requestId:   widget.existingRequest!.id,
-          profession:  _selectedProfession,
+          professions: _selectedProfessions,
           category:    _selectedCategory,
           description: _descController.text.trim(),
           address:     addressText.isEmpty ? null : addressText,
@@ -191,7 +228,8 @@ class _BroadcastRequestScreenState
           customerId:    user.uid,
           customerName:  user.displayName ?? user.email ?? '',
           customerEmail: user.email ?? '',
-          profession:    _selectedProfession,
+          profession:    _primaryProfession,
+          professions:   _selectedProfessions,
           category:      _selectedCategory,
           description:   _descController.text.trim(),
           address:       addressText.isEmpty ? null : addressText,
@@ -224,7 +262,7 @@ class _BroadcastRequestScreenState
 
   @override
   Widget build(BuildContext context) {
-    final categories = kProfessionCategories[_selectedProfession] ?? [];
+    final categories = kProfessionCategories[_primaryProfession] ?? [];
     final isEditing  = widget.isEditing;
 
     return Scaffold(
@@ -313,38 +351,88 @@ class _BroadcastRequestScreenState
                 const SizedBox(height: 20),
               ],
 
-              // ── Profession ─────────────────────────────────────────
-              _sectionTitle('broadcastRequest_profession'.tr(),
-                  Icons.handyman_outlined),
+              // ── Profession (multi-select, max 3) ───────────────────
+              Row(children: [
+                Expanded(
+                  child: _sectionTitle(
+                      'broadcastRequest_profession'.tr(),
+                      Icons.handyman_outlined)),
+                Text(
+                  '${_selectedProfessions.length}/$kMaxBroadcastProfessions',
+                  style: TextStyle(fontSize: 12,
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w600)),
+              ]),
+              const SizedBox(height: 6),
+              Text('broadcastRequest_profession_info'.tr(
+                  namedArgs: {'max': '$kMaxBroadcastProfessions'}),
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade500)),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8)]),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedProfession,
-                    isExpanded: true,
-                    items: kProfessionCategories.keys.map((key) =>
-                        DropdownMenuItem(
-                            value: key,
-                            child: Row(children: [
-                              Icon(kProfessionIcons[key] ??
-                                  Icons.handyman_outlined,
-                                  size: 15, color: _kPrimary),
-                              const SizedBox(width: 8),
-                              Text(key.tr(),
-                                  style: const TextStyle(fontSize: 14)),
-                            ]))).toList(),
-                    onChanged: (v) => _onProfessionChanged(v!)))),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: kProfessionCategories.keys.map((p) {
+                  final sel = _selectedProfessions.contains(p);
+                  final isPrimary = sel && _primaryProfession == p;
+                  final atLimit = !sel &&
+                      _selectedProfessions.length >=
+                          kMaxBroadcastProfessions;
+                  return GestureDetector(
+                    onTap: () => _toggleProfession(p),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? _kPrimary
+                            : (atLimit ? Colors.grey.shade100 : Colors.white),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: sel
+                                ? _kPrimary : Colors.grey.shade300,
+                            width: sel ? 2 : 1),
+                        boxShadow: sel ? [BoxShadow(
+                            color: _kPrimary.withOpacity(0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2))] : []),
+                      child: Row(mainAxisSize: MainAxisSize.min,
+                          children: [
+                        Icon(kProfessionIcons[p] ?? Icons.handyman_outlined,
+                            size: 14,
+                            color: sel
+                                ? Colors.white
+                                : (atLimit
+                                    ? Colors.grey.shade400
+                                    : _kPrimary)),
+                        const SizedBox(width: 6),
+                        Text(p.tr(), style: TextStyle(fontSize: 13,
+                            fontWeight: sel
+                                ? FontWeight.bold : FontWeight.normal,
+                            color: sel
+                                ? Colors.white
+                                : (atLimit
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade700))),
+                        if (isPrimary) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                                'broadcastRequest_profession_primary'.tr(),
+                                style: const TextStyle(fontSize: 9,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold))),
+                        ],
+                      ])));
+                }).toList()),
               const SizedBox(height: 20),
 
-              // ── Category ───────────────────────────────────────────
+              // ── Category (viazaná na primárnu profesiu) ────────────
               _sectionTitle('broadcastRequest_category'.tr(),
                   Icons.category_outlined),
               const SizedBox(height: 10),
@@ -370,7 +458,7 @@ class _BroadcastRequestScreenState
                             color: _kPrimary.withOpacity(0.2),
                             blurRadius: 6,
                             offset: const Offset(0, 2))] : []),
-                      child: Text(cat, style: TextStyle(fontSize: 13,
+                      child: Text(cat.tr(), style: TextStyle(fontSize: 13,
                           fontWeight: sel
                               ? FontWeight.bold : FontWeight.normal,
                           color: sel

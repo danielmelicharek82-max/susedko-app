@@ -14,11 +14,6 @@ class ServiceRequest {
   final String customerEmail;
 
   final String profession;
-  // ── Viacero profesií pre broadcast dopyt (max 3) ───────────────────────
-  // `profession` (vyššie) zostáva vyplnené prvou profesiou zo zoznamu kvôli
-  // spätnej kompatibilite so starými dopytmi a queries, ktoré ešte filtrujú
-  // len na singulárne pole. Nové queries/UI by mali používať `professions`.
-  final List<String> professions;
   final String category;
   final String description;
   final String? estimatedDuration;
@@ -35,13 +30,6 @@ class ServiceRequest {
   final DateTime createdAt;
   final String? craftsmanReply;
 
-  // ── Raw Firestore document data ────────────────────────────────────────
-  // toMap()/fromFirestore() only know about the fixed fields above. Dynamic
-  // per-craftsman fields written by the web app (e.g. `interest_<uid>` maps
-  // containing `customerReply`) aren't part of that fixed schema, so they
-  // must be read from here instead of from toMap(). See open_requests_screen.
-  final Map<String, dynamic> rawData;
-
   // ── Admin-only transient fields (not stored in Firestore) ─────────────────
   final String? adminCustomerEmail;
   final String? adminCustomerPhone;
@@ -56,7 +44,6 @@ class ServiceRequest {
     required this.customerName,
     required this.customerEmail,
     required this.profession,
-    List<String>? professions,
     required this.category,
     required this.description,
     this.estimatedDuration,
@@ -71,14 +58,11 @@ class ServiceRequest {
     this.interestedCraftsmanIds = const [],
     required this.createdAt,
     this.craftsmanReply,
-    this.rawData = const {},
     this.adminCustomerEmail,
     this.adminCustomerPhone,
     this.adminCraftsmanEmail,
     this.adminCraftsmanPhone,
-  }) : professions = (professions == null || professions.isEmpty)
-            ? [profession]
-            : professions;
+  });
 
   bool get isBroadcast => type == ServiceRequestType.broadcast;
 
@@ -89,7 +73,6 @@ class ServiceRequest {
     'customerName':           customerName,
     'customerEmail':          customerEmail,
     'profession':             profession,
-    'professions':            professions,
     'category':               category,
     'description':            description,
     'estimatedDuration':      estimatedDuration,
@@ -117,11 +100,6 @@ class ServiceRequest {
       customerName:  map['customerName'] ?? '',
       customerEmail: map['customerEmail'] ?? '',
       profession:    map['profession'] ?? '',
-      professions:   map['professions'] != null
-          ? List<String>.from(map['professions'])
-          : (map['profession'] != null && (map['profession'] as String).isNotEmpty
-              ? [map['profession']]
-              : []),
       category:      map['category'] ?? '',
       description:   map['description'] ?? '',
       estimatedDuration: map['estimatedDuration'],
@@ -141,13 +119,11 @@ class ServiceRequest {
           List<String>.from(map['interestedCraftsmanIds'] ?? []),
       createdAt:     (map['createdAt'] as Timestamp).toDate(),
       craftsmanReply: map['craftsmanReply'],
-      rawData:       map,
     );
   }
 
   ServiceRequest copyWith({
     String? profession,
-    List<String>? professions,
     String? category,
     String? description,
     String? estimatedDuration,
@@ -169,7 +145,6 @@ class ServiceRequest {
       customerName:  customerName,
       customerEmail: customerEmail,
       profession:    profession ?? this.profession,
-      professions:   professions ?? this.professions,
       category:      category ?? this.category,
       description:   description ?? this.description,
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
@@ -185,7 +160,6 @@ class ServiceRequest {
           interestedCraftsmanIds ?? this.interestedCraftsmanIds,
       createdAt:     createdAt,
       craftsmanReply: craftsmanReply ?? this.craftsmanReply,
-      rawData:       rawData,
       // zachovaj admin kontakty
       adminCustomerEmail:  adminCustomerEmail,
       adminCustomerPhone:  adminCustomerPhone,
@@ -209,7 +183,6 @@ class ServiceRequest {
       customerName:  customerName,
       customerEmail: this.customerEmail,
       profession:    profession,
-      professions:   professions,
       category:      category,
       description:   description,
       estimatedDuration: estimatedDuration,
@@ -224,7 +197,6 @@ class ServiceRequest {
       interestedCraftsmanIds: interestedCraftsmanIds,
       createdAt:     createdAt,
       craftsmanReply: craftsmanReply,
-      rawData:       rawData,
       adminCustomerEmail:  customerEmail ?? adminCustomerEmail,
       adminCustomerPhone:  customerPhone ?? adminCustomerPhone,
       adminCraftsmanEmail: craftsmanEmail ?? adminCraftsmanEmail,

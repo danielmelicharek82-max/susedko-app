@@ -50,26 +50,13 @@ class GeoService {
     double radiusKm = 50.0,
     List<String>? professions,
   }) async {
-    // Poznámka: filter podľa profesie sa robí až tu v Darte, nie vo
-    // Firestore dotaze. Firestore `whereIn` vie filtrovať len jedno
-    // pole naraz, ale remeselník môže mať zvolenú profesiu buď ako
-    // svoju hlavnú `profession`, alebo len medzi ďalšími `skills` —
-    // predtým sa `whereIn` pýtalo len na `profession`, takže
-    // remeselníci s viacerými profesiami sa pri filtri podľa
-    // vedľajšej profesie vôbec nenašli. Pri stovkách remeselníkov by
-    // to chcelo Firestore `Filter.or()`, no pri desiatkach/pár stovkách
-    // záznamov je stiahnutie všetkých aktívnych a filtrovanie v appke
-    // jednoduchšie aj spoľahlivejšie.
-    final snap = await _db.collection('craftsmen').where('isActive', isEqualTo: true).get();
-    final allCraftsmen = snap.docs.map(Craftsman.fromFirestore);
-
-    final matchesProfession = professions == null || professions.isEmpty
-        ? allCraftsmen
-        : allCraftsmen.where((c) =>
-            professions.contains(c.profession) ||
-            c.skills.any((s) => professions.contains(s)));
-
-    final result = matchesProfession
+    Query query = _db.collection('craftsmen').where('isActive', isEqualTo: true);
+    if (professions != null && professions.isNotEmpty) {
+      query = query.where('profession', whereIn: professions);
+    }
+    final snap = await query.get();
+    final result = snap.docs
+        .map(Craftsman.fromFirestore)
         .where((c) => c.geoPoint != null)
         .map((c) {
           final dist = _haversineKm(lat, lng, c.geoPoint!.latitude, c.geoPoint!.longitude);

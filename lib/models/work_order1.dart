@@ -230,49 +230,22 @@ class WorkOrder {
       status == WorkOrderStatus.hoursApproved && weeklyInvoiceId == null;
 
   // ── Viacdňová zákazka (dailyLogs) ────────────────────────────────────
-  // Viacdňovosť je daná výhradne rozsahom scheduledAt→scheduledEndAt, NIE
-  // tým, či už niekto do dailyLogs niečo zapísal. Predtým vyžadovalo
-  // `dailyLogs.isNotEmpty`, čo pri objednávke vytvorenej cez web portál
-  // (kde dailyLogs na začiatku vôbec neexistuje) vyhodnocovalo isMultiDay
-  // ako false — kým remeselník cez web nezadal aspoň jeden deň, appka
-  // zákazku ukazovala ako jednodňovú; a keď už jeden deň v mape bol,
-  // ukázala len TEN jeden deň namiesto celého rozsahu.
-  bool get isMultiDay =>
-      scheduledEndAt != null && !_isSameDate(scheduledAt, scheduledEndAt!);
+  bool get isMultiDay => scheduledEndAt != null && dailyLogs.isNotEmpty;
 
-  static String _dailyKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  static bool _isSameDate(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  // Zoznam VŠETKÝCH dní v rozsahu scheduledAt→scheduledEndAt (vrátane),
-  // nie len tých, ktoré už majú záznam v dailyLogs. Dni bez záznamu sa
-  // doplnia predvolenou hodnotou DailyLogStatus.notLogged.
+  // Dni zoradené chronologicky podľa kľúča ("yyyy-MM-dd" triedi sa
+  // prirodzene ako string).
   List<MapEntry<String, DailyLog>> get sortedDailyLogs {
-    if (scheduledEndAt == null) {
-      final entries = dailyLogs.entries.toList();
-      entries.sort((a, b) => a.key.compareTo(b.key));
-      return entries;
-    }
-    final entries = <MapEntry<String, DailyLog>>[];
-    var cursor = DateTime(scheduledAt.year, scheduledAt.month, scheduledAt.day);
-    final end = DateTime(
-        scheduledEndAt!.year, scheduledEndAt!.month, scheduledEndAt!.day);
-    while (!cursor.isAfter(end)) {
-      final key = _dailyKey(cursor);
-      entries.add(MapEntry(key, dailyLogs[key] ?? const DailyLog()));
-      cursor = cursor.add(const Duration(days: 1));
-    }
+    final entries = dailyLogs.entries.toList();
+    entries.sort((a, b) => a.key.compareTo(b.key));
     return entries;
   }
 
   bool get allDailyLogsApproved =>
-      sortedDailyLogs.isNotEmpty &&
-      sortedDailyLogs.every((e) => e.value.status == DailyLogStatus.approved);
+      dailyLogs.isNotEmpty &&
+      dailyLogs.values.every((d) => d.status == DailyLogStatus.approved);
 
   int get approvedDaysCount =>
-      sortedDailyLogs.where((e) => e.value.status == DailyLogStatus.approved).length;
+      dailyLogs.values.where((d) => d.status == DailyLogStatus.approved).length;
 
   double get dailyLogsTotalHours => dailyLogs.values
       .where((d) => d.status == DailyLogStatus.approved)

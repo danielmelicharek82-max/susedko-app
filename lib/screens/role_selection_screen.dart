@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'customer/customer_home.dart';
 import 'craftsman/craftsman_home.dart';
@@ -69,6 +70,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
     try {
       final db = FirebaseFirestore.instance;
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final email = currentUser?.email ?? '';
+      final displayName = currentUser?.displayName ?? '';
 
       await db.collection('users').doc(widget.uid).set({
         'role': role,
@@ -78,11 +82,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       if (role == 'craftsman') {
         await db.collection('craftsmen').doc(widget.uid).set({
           'uid': widget.uid,
+          'email': email,
+          'name': displayName,
           'rating': 0,
           'jobsCompleted': 0,
           'reviewCount': 0,
           'isActive': true,
-          'isVerified': true,
+          // DÔLEŽITÉ: nikdy nenastavovať true tu — "overený" remeselník
+          // znamená, že ho admin manuálne skontroloval (admin.html →
+          // tlačidlo "Overiť"). Nový účet musí vždy čakať na overenie.
+          'isVerified': false,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
@@ -90,7 +99,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       if (role == 'customer') {
         await db.collection('customers').doc(widget.uid).set({
           'uid': widget.uid,
-          'name': '',
+          'email': email,
+          'name': displayName,
           'city': '',
           'preferredProfessions': [],
           'createdAt': FieldValue.serverTimestamp(),

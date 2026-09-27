@@ -456,6 +456,29 @@ class _CraftsmanDetailScreenState
                             fontSize: 15,
                             fontWeight: FontWeight.w600)),
                   ]))),
+              const SizedBox(height: 12),
+
+              // Send a message — tertiary (opens/creates chat, no
+              // booking/request required first)
+              GestureDetector(
+                onTap: _openChat,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    color: _kBg,
+                    borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                    const Icon(Icons.chat_bubble_outline_rounded,
+                        color: _kPrimary, size: 17),
+                    const SizedBox(width: 9),
+                    Text('craftsmanDetail_message'.tr(),
+                        style: const TextStyle(color: _kPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                  ]))),
               const SizedBox(height: 16),
 
               // Share profile card

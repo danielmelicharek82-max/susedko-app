@@ -89,6 +89,12 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
     }
   }
 
+  // Pri VIACDŇOVEJ zákazke (o.isMultiDay) sa objednávka teraz zaregistruje
+  // do VŠETKÝCH dní, ktoré skutočne zablokovala (o.dailyLogs.keys — presne
+  // tá istá množina dní, ktorú createWorkOrder v Cloud Function naozaj
+  // vyprázdnil v availability), nie len do prvého dňa (o.scheduledAt).
+  // Predtým sa dni 2..N rozsahu v tomto kalendári vôbec neobjavili —
+  // vyzerali ako voľné, hoci ich sloty boli v skutočnosti zablokované.
   void _subscribeOrders() {
     if (_uid == null) return;
     _ordersSub = WorkOrderService.watchCraftsman(_uid!).listen(
@@ -97,8 +103,14 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
         for (final o in orders) {
           if (o.status == WorkOrderStatus.cancelled) continue;
           if (o.status == WorkOrderStatus.completed) continue;
-          final key = _dateKey(o.scheduledAt);
-          map.putIfAbsent(key, () => []).add(o);
+          if (o.isMultiDay) {
+            for (final dateKey in o.dailyLogs.keys) {
+              map.putIfAbsent(dateKey, () => []).add(o);
+            }
+          } else {
+            final key = _dateKey(o.scheduledAt);
+            map.putIfAbsent(key, () => []).add(o);
+          }
         }
         if (mounted) setState(() => _ordersByDay = map);
       },
@@ -133,8 +145,28 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
     } finally { if (mounted) setState(() => _saving = false); }
   }
 
+  // Vráti true, ak je `day` "extra" deň (nie prvý) viacdňovej zákazky —
+  // teda deň, ktorý bol pri vytvorení objednávky zablokovaný CELÝ (všetky
+  // sloty naraz), nie len jeden konkrétny čas ako pri prvom dni.
+  bool _isMultiDayExtraDay(DateTime day) {
+    final orders = _ordersByDay[_dateKey(day)] ?? [];
+    return orders.any((o) => o.isMultiDay && !isSameDay(o.scheduledAt, day));
+  }
+
+  WorkOrder? _multiDayOrderFor(DateTime day) {
+    final orders = _ordersByDay[_dateKey(day)] ?? [];
+    for (final o in orders) {
+      if (o.isMultiDay && !isSameDay(o.scheduledAt, day)) return o;
+    }
+    return null;
+  }
+
   void _toggleSlot(String slot) {
     if (_selectedDay == null) return;
+    if (_isMultiDayExtraDay(_selectedDay!)) {
+      _showMultiDayLockedSnack();
+      return;
+    }
     final key    = _dateKey(_selectedDay!);
     final booked = _bookedTimesForDay(_selectedDay!);
 
@@ -168,7 +200,25 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
     });
   }
 
+  void _showMultiDayLockedSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.event_repeat_outlined, color: Colors.white, size: 16),
+        const SizedBox(width: 8),
+        Expanded(child: Text('calendar_multiday_locked'.tr())),
+      ]),
+      backgroundColor: Colors.orange.shade700,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16)));
+  }
+
+  // Extra deň viacdňovej zákazky = CELÝ deň zablokovaný (nie jeden
+  // konkrétny čas ako pri jednodňovej zákazke/prvom dni rozsahu) —
+  // vráti preto všetky sloty, nech ich UI aj _toggleSlot správne
+  // zobrazí/zamkne ako obsadené.
   Set<String> _bookedTimesForDay(DateTime day) {
+    if (_isMultiDayExtraDay(day)) return _allSlots.toSet();
     final orders = _ordersByDay[_dateKey(day)] ?? [];
     return orders.map((o) =>
       '${o.scheduledAt.hour.toString().padLeft(2, '0')}:'
@@ -176,6 +226,15 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
   }
 
   Color _slotOrderColor(String slot, DateTime day) {
+    final multiDayOrder = _multiDayOrderFor(day);
+    if (multiDayOrder != null) {
+      switch (multiDayOrder.status) {
+        case WorkOrderStatus.pending:   return Colors.orange;
+        case WorkOrderStatus.confirmed: return const Color(0xFFDC2626);
+        default: return Colors.grey;
+      }
+    }
+
     final orders = _ordersByDay[_dateKey(day)] ?? [];
     final order  = orders.cast<WorkOrder?>().firstWhere(
       (o) {
@@ -204,12 +263,20 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
 
   void _selectAll() {
     if (_selectedDay == null) return;
+    if (_isMultiDayExtraDay(_selectedDay!)) {
+      _showMultiDayLockedSnack();
+      return;
+    }
     setState(() =>
         _availability[_dateKey(_selectedDay!)] = List<String>.from(_allSlots));
   }
 
   void _clearDay() {
     if (_selectedDay == null) return;
+    if (_isMultiDayExtraDay(_selectedDay!)) {
+      _showMultiDayLockedSnack();
+      return;
+    }
     final key    = _dateKey(_selectedDay!);
     final booked = _bookedTimesForDay(_selectedDay!);
     if (booked.isNotEmpty) {
@@ -339,6 +406,8 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
         ? _bookedTimesForDay(_selectedDay!) : <String>{};
     final ordersToday   = _selectedDay != null
         ? (_ordersByDay[_dateKey(_selectedDay!)] ?? []) : <WorkOrder>[];
+    final selectedIsMultiDayExtra = _selectedDay != null
+        ? _isMultiDayExtraDay(_selectedDay!) : false;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -507,13 +576,36 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
                                       color: Colors.white.withOpacity(0.8),
                                       fontSize: 12)),
                           ])),
-                          // Quick actions
-                          _quickBtn(Icons.select_all_rounded,
-                              'calendar_select_all'.tr(), _selectAll),
-                          const SizedBox(width: 6),
-                          _quickBtn(Icons.clear_rounded,
-                              'delete'.tr(), _clearDay, danger: true),
+                          // Quick actions — skryté pre "extra" deň
+                          // viacdňovej zákazky, kde by boli aj tak no-op
+                          // (sloty sú zamknuté, pozri _isMultiDayExtraDay).
+                          if (!selectedIsMultiDayExtra) ...[
+                            _quickBtn(Icons.select_all_rounded,
+                                'calendar_select_all'.tr(), _selectAll),
+                            const SizedBox(width: 6),
+                            _quickBtn(Icons.clear_rounded,
+                                'delete'.tr(), _clearDay, danger: true),
+                          ],
                         ]))),
+
+                    // ── Info pásik: tento deň patrí viacdňovej zákazke ────
+                    if (selectedIsMultiDayExtra)
+                      SliverToBoxAdapter(
+                        child: Container(
+                          margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          color: Colors.orange.shade50,
+                          child: Row(children: [
+                            Icon(Icons.event_repeat_outlined,
+                                size: 15, color: Colors.orange.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(
+                                'calendar_multiday_day_info'.tr(),
+                                style: TextStyle(fontSize: 12,
+                                    color: Colors.orange.shade800,
+                                    height: 1.4))),
+                          ]))),
 
                     // ── Grid slotov ──────────────────────────────────────
                     SliverToBoxAdapter(
@@ -627,7 +719,7 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
                       delegate: SliverChildBuilderDelegate(
                         (ctx, i) => Padding(
                           padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                          child: _orderCard(ordersToday[i])),
+                          child: _orderCard(ordersToday[i], _selectedDay!)),
                         childCount: ordersToday.length)),
                   ],
 
@@ -712,11 +804,18 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
     ]));
 
   // ── Karta objednávky ───────────────────────────────────────────────────────
-  Widget _orderCard(WorkOrder o) {
+  // `day` = deň, pod ktorým sa táto karta práve zobrazuje (_selectedDay).
+  // Pri viacdňovej zákazke a `day` != o.scheduledAt (t.j. "extra" deň
+  // rozsahu) sa namiesto konkrétneho času (ktorý patrí len prvému dňu)
+  // zobrazí "Celý deň" — presný HH:mm z o.scheduledAt by tu bol zavádzajúci.
+  Widget _orderCard(WorkOrder o, DateTime day) {
     final isPending   = o.status == WorkOrderStatus.pending;
     final isConfirmed = o.status == WorkOrderStatus.confirmed;
     final statusColor = isPending ? Colors.orange : const Color(0xFFDC2626);
-    final timeStr     = DateFormat('HH:mm').format(o.scheduledAt);
+    final isMultiDayExtra = o.isMultiDay && !isSameDay(o.scheduledAt, day);
+    final timeStr     = isMultiDayExtra
+        ? 'calendar_all_day'.tr()
+        : DateFormat('HH:mm').format(o.scheduledAt);
     final customer    = o.customerSnapshot?['name'] ?? 'customer'.tr();
 
     return Container(
@@ -757,10 +856,13 @@ class _CraftsmanCalendarScreenState extends State<CraftsmanCalendarScreen>
                       fontWeight: FontWeight.bold)),
               ])),
             const Spacer(),
+            if (isMultiDayExtra)
+              Icon(Icons.event_repeat_outlined, size: 15, color: statusColor),
+            if (isMultiDayExtra) const SizedBox(width: 6),
             Text(timeStr,
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                    fontSize: isMultiDayExtra ? 13 : 18,
                     color: statusColor)),
           ])),
         // Telo

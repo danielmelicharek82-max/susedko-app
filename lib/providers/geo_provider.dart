@@ -11,6 +11,7 @@ class GeoProvider extends ChangeNotifier {
   double _radiusKm = 50.0;
   bool _isLoading = false;
   bool _locationDenied = false;
+  bool _locationDeniedForever = false;
   String? _error;
 
   Position? get currentPosition => _currentPosition;
@@ -19,25 +20,52 @@ class GeoProvider extends ChangeNotifier {
   double get radiusKm => _radiusKm;
   bool get isLoading => _isLoading;
   bool get locationDenied => _locationDenied;
+  bool get locationDeniedForever => _locationDeniedForever;
   String? get error => _error;
   bool get hasLocation => _currentPosition != null;
 
   Future<void> init() async {
     _isLoading = true;
+    _locationDenied = false;
+    _locationDeniedForever = false;
     _error = null;
     notifyListeners();
-    final position = await GeoService.getCurrentPosition();
-    if (position == null) {
-      final permission = await Geolocator.checkPermission();
-      _locationDenied = permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever;
+
+    // Skontroluj permission stav pred pokusom o polohu
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.deniedForever) {
+      _locationDenied = true;
+      _locationDeniedForever = true;
       _isLoading = false;
       notifyListeners();
       return;
     }
+
+    final position = await GeoService.getCurrentPosition();
+    if (position == null) {
+      // Znova skontroluj – možno používateľ zamietol počas init()
+      final permAfter = await Geolocator.checkPermission();
+      _locationDeniedForever = permAfter == LocationPermission.deniedForever;
+      _locationDenied = true;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
     _locationDenied = false;
+    _locationDeniedForever = false;
     _currentPosition = position;
     await _loadCraftsmen();
+  }
+
+  /// Otvorí systémové nastavenia ak je permission permanentne zamietnuté,
+  /// inak sa pokúsi znova získať polohu.
+  Future<void> requestLocationOrOpenSettings() async {
+    if (_locationDeniedForever) {
+      await Geolocator.openAppSettings();
+    } else {
+      await init();
+    }
   }
 
   Future<void> refresh() async {

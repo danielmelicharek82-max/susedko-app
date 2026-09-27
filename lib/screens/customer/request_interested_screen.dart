@@ -48,10 +48,11 @@ class _RequestInterestedScreenState
         if (!doc.exists) continue;
         final craftsman = Craftsman.fromFirestore(doc);
         final interestData =
-            r.toMap()['interest_$uid'] as Map<String, dynamic>?;
+            r.rawData['interest_$uid'] as Map<String, dynamic>?;
         final message = interestData?['message'] as String?;
-        result.add(
-            _CraftsmanInterest(craftsman: craftsman, message: message));
+        final customerReply = interestData?['customerReply'] as String?;
+        result.add(_CraftsmanInterest(
+            craftsman: craftsman, message: message, customerReply: customerReply));
       } catch (e) {
         debugPrint('Error loading craftsman $uid: $e');
       }
@@ -141,6 +142,149 @@ class _RequestInterestedScreenState
           builder: (_) => CreateWorkOrderScreen(
               craftsman: interest.craftsman,
               initialProfession: widget.request.profession)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error'.tr()}: $e'),
+              backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _replyToCraftsman(_CraftsmanInterest interest) async {
+    final controller = TextEditingController(text: interest.customerReply ?? '');
+    final quickReplies = [
+      'replyNoLongerRelevant'.tr(),
+      'replyAlreadyChoseSomeone'.tr(),
+      'replyPleaseCallMe'.tr(),
+    ];
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: StatefulBuilder(
+          builder: (ctx, setDialogState) => Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: 20 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      color: _kPrimary.withOpacity(0.08),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.reply_outlined,
+                      color: _kPrimary, size: 22)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(
+                    'replyToTitle'.tr(namedArgs: {'name': interest.craftsman.name}),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16))),
+              ]),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('quickReplies'.tr(),
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500))),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8,
+                children: quickReplies.map((q) => GestureDetector(
+                  onTap: () => setDialogState(() => controller.text = q),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: controller.text == q
+                          ? _kPrimary.withOpacity(0.12)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: controller.text == q
+                              ? _kPrimary.withOpacity(0.4)
+                              : Colors.transparent)),
+                    child: Text(q, style: TextStyle(
+                        fontSize: 12.5,
+                        color: controller.text == q
+                            ? _kPrimary : Colors.grey.shade700,
+                        fontWeight: controller.text == q
+                            ? FontWeight.w600 : FontWeight.normal)))))
+                .toList()),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                maxLines: 3,
+                maxLength: 200,
+                onChanged: (_) => setDialogState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'yourReplyHint'.tr(),
+                  filled: true, fillColor: Colors.grey.shade50,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade200)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade200)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: _kPrimary, width: 2)))),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Center(child: Text('cancel'.tr(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54)))))),
+                const SizedBox(width: 12),
+                Expanded(child: GestureDetector(
+                  onTap: controller.text.trim().isEmpty
+                      ? null
+                      : () => Navigator.pop(ctx, controller.text.trim()),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                          colors: controller.text.trim().isEmpty
+                              ? [Colors.grey.shade300, Colors.grey.shade300]
+                              : [_kDeep, _kPrimary],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight),
+                      borderRadius: BorderRadius.circular(12)),
+                    child: Center(child: Text('send'.tr(),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)))))),
+              ]),
+            ]),
+          )))));
+
+    if (result == null || result.isEmpty || !mounted) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(widget.request.id)
+          .update({
+        'interest_${interest.craftsman.id}.customerReply': result,
+        'interest_${interest.craftsman.id}.customerReplyAt':
+            FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      setState(() => interest.customerReply = result);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('replySentSnack'.tr()),
+          backgroundColor: Colors.green));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${'error'.tr()}: $e'),
@@ -448,6 +592,31 @@ class _RequestInterestedScreenState
               const SizedBox(height: 10),
             ],
 
+            // Customer's reply (already sent)
+            if (interest.customerReply != null &&
+                interest.customerReply!.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _kPrimary.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _kPrimary.withOpacity(0.15))),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  const Icon(Icons.reply_outlined,
+                      size: 14, color: _kPrimary),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(
+                      '${'yourReplyLabel'.tr()}: ${interest.customerReply}',
+                      style: const TextStyle(
+                          color: _kPrimary,
+                          fontSize: 12.5, height: 1.4))),
+                ])),
+              const SizedBox(height: 10),
+            ],
+
             // Skills
             if (c.skills.isNotEmpty) ...[
               Wrap(spacing: 6, runSpacing: 6,
@@ -472,30 +641,70 @@ class _RequestInterestedScreenState
               const SizedBox(height: 12),
             ],
 
-            // Select button
-            GestureDetector(
-              onTap: () => _selectCraftsman(interest),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [_kDeep, _kPrimary],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [BoxShadow(
-                    color: _kPrimary.withOpacity(0.3),
-                    blurRadius: 10, offset: const Offset(0, 4))]),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  const Icon(Icons.check_circle_outline,
-                      color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text('selectAndOrder'.tr(),
-                      style: const TextStyle(color: Colors.white,
-                          fontWeight: FontWeight.bold, fontSize: 14)),
-                ]))),
+            // Reply + Select buttons
+            Row(children: [
+              Expanded(
+                flex: 1,
+                child: GestureDetector(
+                  onTap: () => _replyToCraftsman(interest),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13, horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _kPrimary.withOpacity(0.3))),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                      const Icon(Icons.reply_outlined,
+                          color: _kPrimary, size: 16),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                              interest.customerReply != null &&
+                                      interest.customerReply!.isNotEmpty
+                                  ? 'editReply'.tr()
+                                  : 'reply'.tr(),
+                              maxLines: 1,
+                              style: const TextStyle(color: _kPrimary,
+                                  fontWeight: FontWeight.w600, fontSize: 13))),
+                      ),
+                    ])))),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  onTap: () => _selectCraftsman(interest),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13, horizontal: 4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [_kDeep, _kPrimary],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(
+                        color: _kPrimary.withOpacity(0.3),
+                        blurRadius: 10, offset: const Offset(0, 4))]),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                      const Icon(Icons.check_circle_outline,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('selectAndOrder'.tr(),
+                              maxLines: 1,
+                              style: const TextStyle(color: Colors.white,
+                                  fontWeight: FontWeight.bold, fontSize: 14))),
+                      ),
+                    ])))),
+            ]),
             const SizedBox(height: 16),
           ])),
       ]));
@@ -505,5 +714,6 @@ class _RequestInterestedScreenState
 class _CraftsmanInterest {
   final Craftsman craftsman;
   final String? message;
-  _CraftsmanInterest({required this.craftsman, this.message});
+  String? customerReply;
+  _CraftsmanInterest({required this.craftsman, this.message, this.customerReply});
 }

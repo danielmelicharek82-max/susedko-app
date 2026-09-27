@@ -100,11 +100,12 @@ class ChatService {
       'lastSenderId': senderId,
     });
 
-    // Poznámka: push notifikáciu o novej správe posiela automaticky Cloud
-    // Function `onMessageCreated`, ktorá počúva na
-    // conversations/{conversationId}/messages/{messageId}. Ručný zápis do
-    // notification_queue tu bol odstránený, lebo spôsoboval, že príjemca
-    // dostal notifikáciu dvakrát (raz odtiaľto, raz z onMessageCreated).
+    await _sendChatNotification(
+      receiverId: receiverId,
+      senderId: senderId,
+      text: text.trim(),
+      conversationId: conversationId,
+    );
   }
 
   static Stream<QuerySnapshot<Map<String, dynamic>>> getMessages(
@@ -195,5 +196,39 @@ class ChatService {
       }
     } catch (_) {}
     return 'Používateľ';
+  }
+
+  static Future<void> _sendChatNotification({
+    required String receiverId,
+    required String senderId,
+    required String text,
+    required String conversationId,
+  }) async {
+    try {
+      final senderDoc =
+          await _firestore.collection('users').doc(senderId).get();
+      final senderName = senderDoc.data()?['name'] ?? 'Nová správa';
+      final fcmToken =
+          (await _firestore.collection('users').doc(receiverId).get())
+              .data()?['fcmToken'];
+
+      if (fcmToken == null) return;
+
+      await _firestore.collection('notification_queue').add({
+        'token': fcmToken,
+        'userId': receiverId,
+        'title': senderName,
+        'body': text.length > 60 ? '${text.substring(0, 60)}...' : text,
+        'data': {
+          'type': 'new_message',
+          'conversationId': conversationId,
+          'screen': 'chat',
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+        'sent': false,
+      });
+    } catch (e) {
+      // Notifikácia nie je kritická
+    }
   }
 }

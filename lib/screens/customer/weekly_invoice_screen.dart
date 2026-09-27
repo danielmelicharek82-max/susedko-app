@@ -1,5 +1,3 @@
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/foundation.dart';
 // lib/screens/customer/weekly_invoice_screen.dart
 //
 // Zobrazuje súhrnnú faktúru zákazníkovi a umožňuje platbu cez Stripe.
@@ -13,6 +11,8 @@ import 'package:intl/intl.dart';
 import '../../models/weekly_invoice.dart';
 import '../../services/weekly_invoice_service.dart';
 import 'weekly_invoice_qr_payment_screen.dart';
+import 'customer_work_orders_screen.dart';
+import 'customer_home.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -83,45 +83,29 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
         await Stripe.instance.presentGooglePay(
             PresentGooglePayParams(clientSecret: clientSecret));
       } else {
-        debugPrint('PLATFORM weekly_invoice: $defaultTargetPlatform');
-        if (defaultTargetPlatform == TargetPlatform.iOS) {
-          final checkoutResult = await FirebaseFunctions.instance
-              .httpsCallable('createCheckoutSession')
-              .call({
-            'amount': (widget.invoice.totalAmount * 100).round(),
-            'currency': 'eur',
-            'weeklyInvoiceId': widget.invoice.id,
-            'customerId': user.uid,
-            'craftsmanId': widget.invoice.craftsmanId,
-            'successUrl': 'susedko://payment/success?orderId=${widget.invoice.id}',
-            'cancelUrl': 'susedko://payment/cancel?orderId=${widget.invoice.id}',
-          });
-          final checkoutUrl = checkoutResult.data['url'] as String;
-          final uri = Uri.parse(checkoutUrl);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-          return;
-        } else {
-          await Stripe.instance.initPaymentSheet(
-            paymentSheetParameters: SetupPaymentSheetParameters(
-              paymentIntentClientSecret: clientSecret,
-              merchantDisplayName: _kMerchantName,
-              returnURL: 'susedko://stripe-redirect',
-              style: ThemeMode.system,
-              googlePay: PaymentSheetGooglePay(
-                merchantCountryCode: 'SK',
-                currencyCode: 'eur',
-                testEnv: _kGooglePayTestEnv),
-            ));
-          await Stripe.instance.presentPaymentSheet();
-        }
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            paymentIntentClientSecret: clientSecret,
+            merchantDisplayName: _kMerchantName,
+            style: ThemeMode.system,
+            googlePay: PaymentSheetGooglePay(
+              merchantCountryCode: 'SK',
+              currencyCode: 'eur',
+              testEnv: _kGooglePayTestEnv),
+          ));
+        await Stripe.instance.presentPaymentSheet();
       }
 
       await WeeklyInvoiceService.markPaid(
           widget.invoice.id, paymentIntentId);
 
       if (mounted) {
+        // Po úspešnej platbe presmeruj zákazníka na záložku Objednávky →
+        // História, kde má faktúrou zaplatené zákazky hneď viditeľné aj
+        // s tlačidlom na ohodnotenie remeselníka — namiesto skoku na
+        // úplný začiatok appky bez ďalšieho vysvetlenia.
+        CustomerWorkOrdersScreen.requestedTab.value = 2;   // História
+        CustomerHomeScreen.requestedIndex.value = 2;       // Objednávky
         Navigator.popUntil(context, (route) => route.isFirst);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('invoice_paid_success'.tr()),

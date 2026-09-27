@@ -6,6 +6,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import '../../models/service_request.dart';
 import '../../services/service_request_service.dart';
+import '../chat_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -111,7 +112,7 @@ class _CraftsmanRequestsScreenState extends State<CraftsmanRequestsScreen>
                   Text(request.customerName,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text('${request.profession.tr()} — ${request.category}',
+                  Text('${request.profession.tr()} — ${request.category.tr()}',
                       style: TextStyle(
                           color: Colors.grey.shade500, fontSize: 12)),
                 ])),
@@ -372,6 +373,21 @@ class _CraftsmanRequestsScreenState extends State<CraftsmanRequestsScreen>
                     color: Colors.grey.shade500, fontSize: 12)),
               ]),
             ])),
+            GestureDetector(
+              onTap: () => showServiceRequestChat(context,
+                  requestId: r.id,
+                  customerId: r.customerId,
+                  craftsmanId: user!.uid,
+                  otherUserName: r.customerName),
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: _kPrimary.withOpacity(0.1),
+                  shape: BoxShape.circle),
+                child: Icon(Icons.chat_bubble_outline_rounded,
+                    size: 16, color: _kPrimary)),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 5),
@@ -395,7 +411,7 @@ class _CraftsmanRequestsScreenState extends State<CraftsmanRequestsScreen>
               crossAxisAlignment: CrossAxisAlignment.start, children: [
 
             _infoChip(Icons.handyman_rounded,
-                '${r.profession.tr()} — ${r.category}',
+                '${r.profession.tr()} — ${r.category.tr()}',
                 _kPrimary.withOpacity(0.08), _kPrimary),
             const SizedBox(height: 8),
 

@@ -51,10 +51,7 @@ class _LoginScreenState extends State<LoginScreen>
     super.initState();
 
     _fadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-      value: 1.0,
-    );
+      vsync: this, duration: const Duration(milliseconds: 1000));
 
     _floatCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 3200))
@@ -158,6 +155,7 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  // ── SIGN IN WITH APPLE ─────────────────────────────────────────────────────
   String _generateNonce([int length = 32]) {
     const charset =
         '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
@@ -239,6 +237,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) setState(() => _isAppleLoading = false);
     }
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
@@ -268,6 +267,7 @@ class _LoginScreenState extends State<LoginScreen>
     return Scaffold(
       body: Stack(children: [
 
+        // ── Background gradient ──────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -281,15 +281,21 @@ class _LoginScreenState extends State<LoginScreen>
               end: Alignment.bottomRight)),
         ),
 
+        // ── Decorative glow orbs ─────────────────────────────────────────
         Positioned(top: -100, left: -80,
-          child: _GlowOrb(size: 320, color: _kPrimary.withOpacity(0.18))),
+          child: _GlowOrb(size: 320,
+              color: _kPrimary.withOpacity(0.18))),
         Positioned(bottom: -80, right: -60,
-          child: _GlowOrb(size: 280, color: _kGreen.withOpacity(0.14))),
+          child: _GlowOrb(size: 280,
+              color: _kGreen.withOpacity(0.14))),
         Positioned(top: size.height * 0.35, right: -40,
-          child: _GlowOrb(size: 180, color: _kPrimary.withOpacity(0.1))),
+          child: _GlowOrb(size: 180,
+              color: _kPrimary.withOpacity(0.1))),
         Positioned(top: size.height * 0.55, left: -20,
-          child: _GlowOrb(size: 140, color: _kGreen.withOpacity(0.08))),
+          child: _GlowOrb(size: 140,
+              color: _kGreen.withOpacity(0.08))),
 
+        // ── Stars / particles ────────────────────────────────────────────
         ...List.generate(12, (i) {
           final positions = [
             [0.1, 0.08], [0.85, 0.12], [0.45, 0.05],
@@ -309,31 +315,39 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle)));
         }),
 
+        // ── Content ──────────────────────────────────────────────────────
         SafeArea(
           child: FadeTransition(
             opacity: _fadeAnim,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 28, vertical: 20),
               child: Column(children: [
                 const SizedBox(height: 20),
 
+                // ── Logo + title ────────────────────────────────────────
                 AnimatedBuilder(
                   animation: _floatAnim,
                   builder: (_, child) => Transform.translate(
                     offset: Offset(0, -_floatAnim.value),
                     child: child),
                   child: Column(children: [
+                    // Logo with glow effect — no white background
                     Stack(alignment: Alignment.center, children: [
+                      // Outer glow
                       Container(
                         width: 110, height: 110,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           boxShadow: [
-                            BoxShadow(color: _kPrimary.withOpacity(0.4),
-                                blurRadius: 40, spreadRadius: 10),
-                            BoxShadow(color: _kPrimary.withOpacity(0.2),
-                                blurRadius: 80, spreadRadius: 20),
+                            BoxShadow(
+                              color: _kPrimary.withOpacity(0.4),
+                              blurRadius: 40, spreadRadius: 10),
+                            BoxShadow(
+                              color: _kPrimary.withOpacity(0.2),
+                              blurRadius: 80, spreadRadius: 20),
                           ])),
+                      // Logo container with gradient border
                       Container(
                         width: 90, height: 90,
                         decoration: BoxDecoration(
@@ -345,35 +359,48 @@ class _LoginScreenState extends State<LoginScreen>
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.2), width: 1.5)),
+                            color: Colors.white.withOpacity(0.2),
+                            width: 1.5)),
                         child: ClipOval(
-                          child: Image.asset('assets/logo.png',
-                              width: 90, height: 90, fit: BoxFit.contain))),
+                          child: Image.asset(
+                            'assets/logo.png',
+                            width: 90, height: 90,
+                            fit: BoxFit.contain,
+                            // This makes white background transparent
+                            color: null,
+                          ))),
                     ]),
                     const SizedBox(height: 16),
 
+                    // App name with shimmer
                     AnimatedBuilder(
                       animation: _shimmerAnim,
                       builder: (_, __) => ShaderMask(
                         shaderCallback: (bounds) => LinearGradient(
                           colors: const [
-                            Colors.white, Color(0xFF93C5FD), Colors.white],
+                            Colors.white,
+                            Color(0xFF93C5FD),
+                            Colors.white,
+                          ],
                           stops: const [0.0, 0.5, 1.0],
                           begin: Alignment(_shimmerAnim.value - 1, 0),
                           end: Alignment(_shimmerAnim.value + 1, 0),
                         ).createShader(bounds),
                         child: const Text('Susedko',
                             style: TextStyle(
-                              color: Colors.white, fontSize: 32,
+                              color: Colors.white,
+                              fontSize: 32,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5)))),
                     const SizedBox(height: 6),
                     Text('signInToAccount'.tr(),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.55), fontSize: 14)),
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: 14)),
                   ])),
                 const SizedBox(height: 36),
 
+                // ── Glass card ──────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -382,10 +409,13 @@ class _LoginScreenState extends State<LoginScreen>
                     border: Border.all(
                         color: Colors.white.withOpacity(0.12), width: 1),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.3),
-                          blurRadius: 30, offset: const Offset(0, 10)),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 30, offset: const Offset(0, 10)),
                     ]),
                   child: Column(children: [
+
+                    // Email field
                     _GlassField(
                       controller: _emailController,
                       label: 'email'.tr(),
@@ -393,6 +423,7 @@ class _LoginScreenState extends State<LoginScreen>
                       keyboardType: TextInputType.emailAddress),
                     const SizedBox(height: 14),
 
+                    // Password field
                     _GlassField(
                       controller: _passwordController,
                       label: 'password'.tr(),
@@ -408,17 +439,21 @@ class _LoginScreenState extends State<LoginScreen>
                             () => _passwordVisible = !_passwordVisible))),
                     const SizedBox(height: 8),
 
+                    // Forgot password
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: _resetPassword,
                         style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero, minimumSize: Size.zero),
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero),
                         child: Text('forgotPassword'.tr(),
                             style: TextStyle(
-                              color: Colors.blue.shade300, fontSize: 13)))),
+                              color: Colors.blue.shade300,
+                              fontSize: 13)))),
                     const SizedBox(height: 20),
 
+                    // Sign in button
                     _GradientButton(
                       onTap: _isLoading ? null : _submit,
                       loading: _isLoading,
@@ -426,31 +461,37 @@ class _LoginScreenState extends State<LoginScreen>
                       colors: const [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
                     const SizedBox(height: 12),
 
+                    // Google button
                     _GoogleButton(
                       onTap: _isGoogleLoading ? null : _signInWithGoogle,
                       loading: _isGoogleLoading,
                       text: 'signInWithGoogle'.tr()),
                     const SizedBox(height: 12),
 
+                    // Apple button
                     _AppleButton(
                       onTap: _isAppleLoading ? null : _signInWithApple,
                       loading: _isAppleLoading),
                   ])),
                 const SizedBox(height: 28),
 
+                // ── Register section ────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.04),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.08))),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.08))),
                   child: Column(children: [
                     Text('noAccount'.tr(),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.5), fontSize: 13)),
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 13)),
                     const SizedBox(height: 14),
                     Row(children: [
+                      // Customer register
                       Expanded(child: _RegisterBtn(
                         label: 'customer'.tr(),
                         icon: Icons.person_outline,
@@ -459,6 +500,7 @@ class _LoginScreenState extends State<LoginScreen>
                             MaterialPageRoute(builder: (_) =>
                                 const CustomerRegisterForm())))),
                       const SizedBox(width: 12),
+                      // Craftsman register
                       Expanded(child: _RegisterBtn(
                         label: 'craftsman'.tr(),
                         icon: Icons.handyman_outlined,
@@ -505,6 +547,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
+// ── Glow orb ──────────────────────────────────────────────────────────────────
 class _GlowOrb extends StatelessWidget {
   final double size;
   final Color color;
@@ -520,6 +563,7 @@ class _GlowOrb extends StatelessWidget {
       color: color));
 }
 
+// ── Glass text field ───────────────────────────────────────────────────────────
 class _GlassField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -546,7 +590,8 @@ class _GlassField extends StatelessWidget {
       style: const TextStyle(color: Colors.white, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5),
+            fontSize: 14),
         prefixIcon: Icon(icon, color: Colors.white38, size: 20),
         suffixIcon: suffixIcon,
         filled: true,
@@ -556,14 +601,18 @@ class _GlassField extends StatelessWidget {
           borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1), width: 1)),
+          borderSide: BorderSide(
+              color: Colors.white.withOpacity(0.1), width: 1)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16)));
+          borderSide: BorderSide(
+              color: Colors.blue.shade400, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 16)));
   }
 }
 
+// ── Gradient button ────────────────────────────────────────────────────────────
 class _GradientButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
@@ -601,6 +650,7 @@ class _GradientButton extends StatelessWidget {
   }
 }
 
+// ── Google button ──────────────────────────────────────────────────────────────
 class _GoogleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
@@ -628,14 +678,17 @@ class _GoogleButton extends StatelessWidget {
                 child: CircularProgressIndicator(
                     color: Colors.white, strokeWidth: 2))
             : Row(mainAxisSize: MainAxisSize.min, children: [
+                // Google G icon
                 Container(
                   width: 20, height: 20,
                   decoration: const BoxDecoration(
-                    shape: BoxShape.circle, color: Colors.white),
+                    shape: BoxShape.circle,
+                    color: Colors.white),
                   child: const Center(child: Text('G',
                       style: TextStyle(
                         color: Color(0xFF4285F4),
-                        fontWeight: FontWeight.bold, fontSize: 13)))),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13)))),
                 const SizedBox(width: 10),
                 Text(text, style: TextStyle(
                     color: Colors.white.withOpacity(0.85),
@@ -644,11 +697,12 @@ class _GoogleButton extends StatelessWidget {
   }
 }
 
+// ── Apple button ───────────────────────────────────────────────────────────────
 class _AppleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool loading;
 
-  _AppleButton({required this.onTap, required this.loading});
+  const _AppleButton({required this.onTap, required this.loading});
 
   @override
   Widget build(BuildContext context) {
@@ -676,6 +730,7 @@ class _AppleButton extends StatelessWidget {
   }
 }
 
+// ── Register button ────────────────────────────────────────────────────────────
 class _RegisterBtn extends StatelessWidget {
   final String label;
   final IconData icon;

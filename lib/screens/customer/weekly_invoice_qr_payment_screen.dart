@@ -10,6 +10,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/weekly_invoice.dart';
 import '../../services/weekly_invoice_service.dart';
+import 'customer_work_orders_screen.dart';
+import 'customer_home.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -136,6 +138,14 @@ class _WeeklyInvoiceQrPaymentScreenState
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
 
+      // Po úspešnej platbe presmeruj zákazníka na záložku Objednávky →
+      // História, kde má faktúrou zaplatené zákazky hneď viditeľné aj
+      // s tlačidlom na ohodnotenie remeselníka — namiesto skoku na
+      // úplný začiatok appky bez ďalšieho vysvetlenia. Rovnaký princíp
+      // ako v weekly_invoice_screen.dart, aby sa platba kartou/Google Pay
+      // a QR platba správali rovnako.
+      CustomerWorkOrdersScreen.requestedTab.value = 2;   // História
+      CustomerHomeScreen.requestedIndex.value = 2;       // Objednávky
       Navigator.popUntil(context, (route) => route.isFirst);
 
       ScaffoldMessenger.of(context).showSnackBar(

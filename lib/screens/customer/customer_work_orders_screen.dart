@@ -12,6 +12,7 @@ import '../../services/weekly_invoice_service.dart';
 import 'work_order_payment_screen.dart';
 import 'weekly_invoice_screen.dart';
 import '../review_screen.dart';
+import '../chat_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -22,6 +23,15 @@ const _kSupportEmail = 'info@susedko.sk';
 const _kSupportPhone = '+421 902 744 743';
 
 class CustomerWorkOrdersScreen extends StatefulWidget {
+  // Externý signál "prepni na túto pod-záložku" pre už bežiacu inštanciu
+  // tejto obrazovky — CustomerHomeScreen drží CustomerWorkOrdersScreen()
+  // v IndexedStacku vytvorenú LEN RAZ (field initializer), takže bežný
+  // konštruktorový parameter by sa uplatnil len pri štarte appky a nikdy
+  // znova. Nastavením .value sa ozve listener v _CustomerWorkOrdersScreenState
+  // (pozri initState), aj keď je táto obrazovka práve prekrytá inou.
+  // 0 = Aktívne, 1 = Na platbu, 2 = História.
+  static final ValueNotifier<int?> requestedTab = ValueNotifier<int?>(null);
+
   const CustomerWorkOrdersScreen({super.key});
   @override
   State<CustomerWorkOrdersScreen> createState() =>
@@ -36,10 +46,22 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    CustomerWorkOrdersScreen.requestedTab.addListener(_onTabRequested);
+  }
+
+  void _onTabRequested() {
+    final index = CustomerWorkOrdersScreen.requestedTab.value;
+    if (index == null || !mounted) return;
+    _tabController.index = index;
+    CustomerWorkOrdersScreen.requestedTab.value = null; // spotrebované
   }
 
   @override
-  void dispose() { _tabController.dispose(); super.dispose(); }
+  void dispose() {
+    CustomerWorkOrdersScreen.requestedTab.removeListener(_onTabRequested);
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,6 +148,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             // Tab 2: hodiny schválené (čaká na výber platby) + paymentDue
             final paymentDue = all.where((o) =>
                 o.status == WorkOrderStatus.paymentDue ||
+                o.status == WorkOrderStatus.daysApproved ||
                 o.status == WorkOrderStatus.hoursApproved).toList();
 
             final history = all.where((o) => [
@@ -243,6 +266,21 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               ]),
             ])),
             const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => showServiceRequestChat(context,
+                  requestId: o.id,
+                  customerId: FirebaseAuth.instance.currentUser!.uid,
+                  craftsmanId: o.craftsmanId,
+                  otherUserName: craftsmanName),
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _kPrimary.withOpacity(0.1),
+                  shape: BoxShape.circle),
+                child: Icon(Icons.chat_bubble_outline_rounded,
+                    size: 15, color: _kPrimary)),
+            ),
             _statusBadge(o.status),
           ])),
 
@@ -295,6 +333,25 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                         color: Colors.grey.shade600),
                     overflow: TextOverflow.ellipsis)),
               ]),
+            ],
+
+            // ── VIACDŇOVÁ ZÁKAZKA: schvaľovanie po dňoch ─────────────
+            if (o.status == WorkOrderStatus.inProgress && o.isMultiDay) ...[
+              const SizedBox(height: 12),
+              _buildCustomerDailyLogsSection(o),
+            ],
+
+            // ── VIACDŇOVÁ ZÁKAZKA: všetky dni schválené → výber platby ──
+            // (Bez tlačidiel na úpravu/odmietnutie — tie už prebehli per
+            // deň v _buildCustomerDailyLogsSection vyššie, kým bol status
+            // ešte inProgress.)
+            if (o.status == WorkOrderStatus.daysApproved) ...[
+              const SizedBox(height: 12),
+              _hoursCard(o),
+              const SizedBox(height: 10),
+              _gradientBtn(label: 'approveHours'.tr(),
+                  icon: Icons.check_circle_outline,
+                  onTap: () => _showPaymentChoiceDialog(o)),
             ],
 
             // ── HOURS TO CONFIRM ──────────────────────────────────────
@@ -411,9 +468,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                 }),
                 icon: Icons.payment_outlined,
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(
-                        fullscreenDialog: true,
-                        builder: (_) =>
+                    MaterialPageRoute(builder: (_) =>
                         WorkOrderPaymentScreen(order: o)))),
             ],
 
@@ -813,6 +868,386 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
     ]));
 
   // ── Actions ────────────────────────────────────────────────────────────────
+  // ── Viacdňová zákazka: schvaľovanie/rework po dňoch ─────────────────────────
+  Widget _buildCustomerDailyLogsSection(WorkOrder o) {
+    final days = o.sortedDailyLogs;
+    final approvedCount = o.approvedDaysCount;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _alertBox(
+        color: Colors.teal,
+        icon: Icons.event_repeat_outlined,
+        title: 'workOrders_multiday_title'.tr(
+            namedArgs: {'approved': '$approvedCount', 'total': '${days.length}'}),
+        text: 'workOrders_multiday_customer_desc'.tr()),
+      const SizedBox(height: 10),
+      ...days.map((entry) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: _customerDailyLogRow(o, entry.key, entry.value))),
+    ]);
+  }
+
+  Widget _customerDailyLogRow(WorkOrder o, String dateKey, DailyLog log) {
+    final day = DateTime.parse(dateKey);
+    final dateLabel = DateFormat('EEE d. MMM').format(day);
+
+    late final IconData icon;
+    late final Color color;
+    late final String title;
+    Widget? extra;
+
+    switch (log.status) {
+      case DailyLogStatus.notLogged:
+        icon = Icons.timer_outlined; color = Colors.grey.shade600;
+        title = 'workOrders_day_not_logged'.tr();
+        break;
+      case DailyLogStatus.logged:
+        icon = Icons.hourglass_top_rounded; color = Colors.orange;
+        title = 'workOrders_day_logged'.tr(namedArgs: {
+          'hours': log.hours?.toStringAsFixed(1) ?? '?'});
+        extra = Column(children: [
+          _priceRow(Icons.timelapse_outlined, 'hoursLogged_worked'.tr(),
+              '${log.hours?.toStringAsFixed(1) ?? '?'} h'),
+          _priceRow(Icons.payments_outlined, 'hoursLogged_total'.tr(),
+              '${log.total?.toStringAsFixed(2) ?? '?'} €', bold: true),
+          if (log.craftsmanNote != null && log.craftsmanNote!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('„${log.craftsmanNote}"', style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic))),
+          const SizedBox(height: 10),
+          _gradientBtn(label: 'approveHours'.tr(),
+              icon: Icons.check_circle_outline,
+              onTap: () => WorkOrderService.approveDailyHours(
+                  orderId: o.id, day: day)),
+          const SizedBox(height: 8),
+          _outlineBtn(
+              label: 'requestAdjustment'.tr(),
+              icon: Icons.refresh, color: Colors.orange,
+              onTap: () => _showDailyReworkDialog(o, day)),
+        ]);
+        break;
+      case DailyLogStatus.approved:
+        icon = Icons.check_circle_rounded; color = Colors.green;
+        title = 'workOrders_day_approved'.tr(namedArgs: {
+          'hours': log.hours?.toStringAsFixed(1) ?? '?'});
+        break;
+      case DailyLogStatus.reworkRequested:
+        icon = Icons.refresh_rounded; color = Colors.orange.shade800;
+        title = 'workOrders_day_rework'.tr();
+        extra = Text('reworkRequested_waiting'.tr(), style: TextStyle(
+            fontSize: 12, color: Colors.grey.shade600, height: 1.4));
+        break;
+      case DailyLogStatus.craftsmanInsisting:
+        icon = Icons.warning_amber_rounded; color = Colors.red;
+        title = 'workOrders_day_insisting'.tr();
+        extra = Column(children: [
+          if (log.craftsmanInsistNote != null &&
+              log.craftsmanInsistNote!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('„${log.craftsmanInsistNote}"', style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade700,
+                  fontStyle: FontStyle.italic))),
+          _supportContactBox(),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: _gradientBtn(
+                label: 'acceptAndPay'.tr(), icon: Icons.check,
+                color: Colors.green,
+                onTap: () => _acceptDailyDespiteInsistence(o, day))),
+            const SizedBox(width: 8),
+            Expanded(child: _outlineBtn(
+                label: 'resolveWithAdmin'.tr(),
+                icon: Icons.admin_panel_settings_outlined,
+                color: Colors.red,
+                onTap: () => _showDailyEscalateDialog(o, day))),
+          ]),
+        ]);
+        break;
+      case DailyLogStatus.disputed:
+        icon = Icons.admin_panel_settings_outlined; color = Colors.red.shade700;
+        title = 'workOrders_day_disputed'.tr();
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 15, color: color)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(dateLabel, style: TextStyle(fontSize: 11,
+                color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+            Text(title, style: TextStyle(fontSize: 13,
+                fontWeight: FontWeight.bold, color: color)),
+          ])),
+        ]),
+        if (extra != null) ...[const SizedBox(height: 10), extra],
+      ]));
+  }
+
+  Future<void> _showDailyReworkDialog(WorkOrder o, DateTime day) async {
+    final ctrl = TextEditingController();
+    final dateLabel = DateFormat('EEEE d. MMM').format(day);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.refresh,
+                    color: Colors.orange.shade600, size: 20)),
+              const SizedBox(width: 10),
+              Expanded(child: Text('reworkDialog_title'.tr(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16))),
+            ]),
+            const SizedBox(height: 4),
+            Text(dateLabel, style: TextStyle(fontSize: 13,
+                color: Colors.grey.shade500)),
+            const SizedBox(height: 12),
+            Text('reworkDialog_desc'.tr(),
+                style: TextStyle(fontSize: 13,
+                    color: Colors.grey.shade600, height: 1.5)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl, maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'reworkDialog_hint'.tr(),
+                hintStyle: TextStyle(
+                    color: Colors.grey.shade400, fontSize: 13),
+                filled: true, fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        BorderSide(color: Colors.grey.shade200)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: _kPrimary, width: 2)))),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('cancel'.tr(),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54)))))),
+              const SizedBox(width: 12),
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Colors.orange.shade600,
+                      Colors.orange.shade400],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('reworkDialog_send'.tr(),
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.bold)))))),
+            ]),
+          ]))));
+
+    if (confirmed == true && mounted) {
+      if (ctrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('reworkDialog_empty'.tr()),
+            backgroundColor: Colors.orange));
+        return;
+      }
+      await WorkOrderService.requestDailyRework(
+          orderId: o.id, day: day, customerNote: ctrl.text.trim());
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('reworkDialog_sent'.tr()),
+          backgroundColor: Colors.orange));
+    }
+  }
+
+  // Na rozdiel od celoobjednávkovej verzie NEotvára _showPaymentChoiceDialog
+  // — výber platby sa zobrazí sám (cez zmenu o.status na hoursApproved),
+  // až keď sú schválené úplne všetky dni rozsahu (pozri
+  // onWorkOrderDailyLogsChanged v index.js).
+  Future<void> _acceptDailyDespiteInsistence(WorkOrder o, DateTime day) async {
+    final dateLabel = DateFormat('EEEE d. MMM').format(day);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.08),
+                shape: BoxShape.circle),
+              child: Icon(Icons.check_circle_outline,
+                  color: Colors.green.shade600, size: 30)),
+            const SizedBox(height: 14),
+            Text('acceptInsist_title'.tr(),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 4),
+            Text(dateLabel, style: TextStyle(fontSize: 13,
+                color: Colors.grey.shade500)),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('cancel'.tr(),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54)))))),
+              const SizedBox(width: 12),
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Colors.green.shade600, Colors.green.shade500],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('acceptAndPay'.tr(),
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.bold)))))),
+            ]),
+          ]))));
+
+    if (confirmed == true && mounted) {
+      await WorkOrderService.acceptDailyDespiteInsistence(
+          orderId: o.id, day: day);
+    }
+  }
+
+  // Eskalácia blokuje len TENTO deň — ostatné dni v rozsahu môžu
+  // naďalej pokračovať nezávisle (zadanie, schválenie...).
+  Future<void> _showDailyEscalateDialog(WorkOrder o, DateTime day) async {
+    final ctrl = TextEditingController();
+    final dateLabel = DateFormat('EEEE d. MMM').format(day);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.admin_panel_settings_outlined,
+                    color: Colors.red.shade600, size: 20)),
+              const SizedBox(width: 10),
+              Expanded(child: Text('escalate_title'.tr(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16))),
+            ]),
+            const SizedBox(height: 4),
+            Text(dateLabel, style: TextStyle(fontSize: 13,
+                color: Colors.grey.shade500)),
+            const SizedBox(height: 12),
+            Text('escalate_desc'.tr(),
+                style: TextStyle(fontSize: 13,
+                    color: Colors.grey.shade600, height: 1.5)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl, maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'escalate_hint'.tr(),
+                hintStyle: TextStyle(
+                    color: Colors.grey.shade400, fontSize: 13),
+                filled: true, fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        BorderSide(color: Colors.grey.shade200)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: _kPrimary, width: 2)))),
+            const SizedBox(height: 12),
+            _supportContactBox(),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('cancel'.tr(),
+                      style: const TextStyle(fontWeight: FontWeight.w600,
+                          color: Colors.black54)))))),
+              const SizedBox(width: 12),
+              Expanded(child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Colors.red.shade700, Colors.red.shade500],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('escalate_send'.tr(),
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13)))))),
+            ]),
+          ]))));
+
+    if (confirmed == true && mounted) {
+      await WorkOrderService.escalateDailyToAdmin(
+          orderId: o.id, day: day, finalNote: ctrl.text.trim());
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('escalate_sent'.tr()),
+          backgroundColor: Colors.red));
+    }
+  }
+
   Future<void> _showReworkDialog(WorkOrder o) async {
     final ctrl = TextEditingController();
     final confirmed = await showDialog<bool>(
@@ -1224,6 +1659,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
       WorkOrderStatus.confirmed:          (_kPrimary,          'confirmed'),
       WorkOrderStatus.inProgress:         (Colors.purple,      'workOrders_tab_active'),
       WorkOrderStatus.hoursLogged:        (Colors.teal,        'customerOrders_tab_hours'),
+      WorkOrderStatus.daysApproved:       (Colors.teal,        'customerOrders_tab_hours'),
       WorkOrderStatus.hoursApproved:      (Colors.teal,        'workOrders_hours_approved_badge'),
       WorkOrderStatus.reworkRequested:    (Colors.orange,      'reworkRequested_title'),
       WorkOrderStatus.craftsmanInsisting: (Colors.red,         'craftsmanInsistingNote'),

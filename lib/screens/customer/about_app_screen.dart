@@ -1,6 +1,7 @@
 // lib/screens/customer/about_app_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -75,7 +76,7 @@ class AboutAppScreen extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.5)),
                         const SizedBox(height: 4),
-                        Text('Remeselníci na pár klikov',
+                        Text('aboutApp_tagline'.tr(),
                             style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 14)),
@@ -92,12 +93,9 @@ class AboutAppScreen extends StatelessWidget {
                 // ── O aplikácii ──────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.info_outline_rounded,
-                  title: 'O aplikácii',
+                  title: 'aboutApp'.tr(),
                   child: Text(
-                    'Susedko je aplikácia, ktorá spája ľudí s remeselníkmi '
-                    'vo vašom okolí. Potrebujete opravu, pomoc v domácnosti '
-                    'alebo odborníka? Stačí pár klikov a riešenie máte '
-                    'na dosah.',
+                    'aboutApp_intro'.tr(),
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade700,
                         height: 1.6))),
                 const SizedBox(height: 14),
@@ -105,40 +103,35 @@ class AboutAppScreen extends StatelessWidget {
                 // ── Ako to funguje ────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.help_outline_rounded,
-                  title: 'Ako to funguje?',
+                  title: 'aboutApp_howto_title'.tr(),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Text(
-                      'Stačí sa lokalizovať vo svojom profile a okamžite '
-                      'uvidíte dostupných remeselníkov vo vašom okolí.',
+                      'aboutApp_howto_intro'.tr(),
                       style: TextStyle(fontSize: 13,
                           color: Colors.grey.shade600, height: 1.5)),
                     const SizedBox(height: 14),
                     _featureTile(
                       icon: Icons.work_outline_rounded,
                       color: _kPrimary,
-                      title: 'Vytvoriť objednávku',
-                      text: 'Vyberiete si konkrétneho remeselníka a '
-                          'rezervujete termín podľa jeho kalendára.'),
+                      title: 'aboutApp_feature_order_title'.tr(),
+                      text: 'aboutApp_feature_order_text'.tr()),
                     _featureTile(
                       icon: Icons.send_outlined,
                       color: Colors.purple,
-                      title: 'Servisná požiadavka',
-                      text: 'Odošlete požiadavku priamo vybranému '
-                          'remeselníkovi a dohodnete si termín.'),
+                      title: 'aboutApp_feature_service_title'.tr(),
+                      text: 'aboutApp_feature_service_text'.tr()),
                     _featureTile(
                       icon: Icons.campaign_outlined,
                       color: Colors.orange,
-                      title: 'Broadcast požiadavka',
-                      text: 'Vaša požiadavka sa zobrazí všetkým '
-                          'remeselníkom v kategórii — viac ponúk, lepší výber.'),
+                      title: 'aboutApp_feature_broadcast_title'.tr(),
+                      text: 'aboutApp_feature_broadcast_text'.tr()),
                     _featureTile(
                       icon: Icons.notifications_outlined,
                       color: Colors.green,
-                      title: 'Okamžité notifikácie',
-                      text: 'Push notifikácie o objednávkach, hodinách '
-                          'a platbách — vždy pod kontrolou.',
+                      title: 'aboutApp_feature_notif_title'.tr(),
+                      text: 'aboutApp_feature_notif_text'.tr(),
                       last: true),
                   ])),
                 const SizedBox(height: 14),
@@ -146,22 +139,19 @@ class AboutAppScreen extends StatelessWidget {
                 // ── Platba ────────────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.payment_outlined,
-                  title: 'Platba',
+                  title: 'aboutApp_payment_title'.tr(),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     _payStep(
                       number: '1',
-                      text: 'Remeselník po dokončení zadá '
-                          'odpracované hodiny.'),
+                      text: 'aboutApp_payment_step1'.tr()),
                     _payStep(
                       number: '2',
-                      text: 'Hodiny vám prídu na schválenie — '
-                          'môžete potvrdiť alebo požiadať o úpravu.'),
+                      text: 'aboutApp_payment_step2'.tr()),
                     _payStep(
                       number: '3',
-                      text: 'Po schválení sa vygeneruje platba, '
-                          'ktorú uhradíte priamo v aplikácii.',
+                      text: 'aboutApp_payment_step3'.tr(),
                       last: true),
                     const SizedBox(height: 12),
                     Container(
@@ -176,8 +166,7 @@ class AboutAppScreen extends StatelessWidget {
                             size: 16, color: Colors.green.shade600),
                         const SizedBox(width: 8),
                         Expanded(child: Text(
-                          'Platba je zabezpečená cez Stripe. '
-                          'Platíte len za odsúhlasené hodiny.',
+                          'aboutApp_payment_note'.tr(),
                           style: TextStyle(fontSize: 12,
                               color: Colors.green.shade700,
                               height: 1.4))),
@@ -188,40 +177,36 @@ class AboutAppScreen extends StatelessWidget {
                 // ── Pre každého ────────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.people_outline_rounded,
-                  title: 'Pre každého, kto si chce zarobiť',
+                  title: 'aboutApp_earn_title'.tr(),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Text(
-                      'Susedko nie je len pre zákazníkov, ale aj pre všetkých, '
-                      'ktorí si chcú privyrobiť.',
+                      'aboutApp_earn_intro'.tr(),
                       style: TextStyle(fontSize: 13,
                           color: Colors.grey.shade600, height: 1.5)),
                     const SizedBox(height: 12),
                     _highlightBox(
                       icon: Icons.star_outline_rounded,
                       color: Colors.amber,
-                      text: 'Otvorené pre mužov aj ženy — bez ohľadu '
-                          'na skúsenosti či profesiu.'),
+                      text: 'aboutApp_earn_highlight1'.tr()),
                     const SizedBox(height: 8),
                     _highlightBox(
                       icon: Icons.trending_up_rounded,
                       color: _kPrimary,
-                      text: 'Budujte si vlastný príjem a reputáciu '
-                          'vďaka hodnoteniam zákazníkov.'),
+                      text: 'aboutApp_earn_highlight2'.tr()),
                   ])),
                 const SizedBox(height: 14),
 
                 // ── Profesie ──────────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.handyman_outlined,
-                  title: 'Pre koho je Susedko',
+                  title: 'aboutApp_professions_title'.tr(),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Text(
-                      'Susedko je pre každého — mužov aj ženy, '
-                      'ktorí chcú pomáhať a zároveň si zarobiť.',
+                      'aboutApp_professions_intro'.tr(),
                       style: TextStyle(fontSize: 13,
                           color: Colors.grey.shade600, height: 1.5)),
                     const SizedBox(height: 14),
@@ -229,30 +214,23 @@ class AboutAppScreen extends StatelessWidget {
                     _professionGroup(
                       icon: Icons.construction_rounded,
                       color: _kPrimary,
-                      title: 'Technické a remeselné profesie',
-                      text: 'Inštalatér, elektrikár, kúrenár, plynár, '
-                          'klampiar, zvárač, oprava spotrebičov, zámočník, '
-                          'murár, maliar, obkladač, podlahár, stolár.'),
+                      title: 'aboutApp_prof_technical_title'.tr(),
+                      text: 'aboutApp_prof_technical_text'.tr()),
                     _professionGroup(
                       icon: Icons.home_outlined,
                       color: Colors.green,
-                      title: 'Služby a pomoc v domácnosti',
-                      text: 'Upratovanie, záhradník, sťahovanie, '
-                          'montáž nábytku, pomoc v domácnosti, IT technik.'),
+                      title: 'aboutApp_prof_home_title'.tr(),
+                      text: 'aboutApp_prof_home_text'.tr()),
                     _professionGroup(
                       icon: Icons.favorite_outline_rounded,
                       color: Colors.pink,
-                      title: 'Starostlivosť a služby pre ľudí',
-                      text: 'Opatrovateľka seniorov, opatrovateľka detí, '
-                          'starostlivosť o zvieratá, zdravotný asistent, '
-                          'fyzioterapeut, psychológ.'),
+                      title: 'aboutApp_prof_care_title'.tr(),
+                      text: 'aboutApp_prof_care_text'.tr()),
                     _professionGroup(
                       icon: Icons.spa_outlined,
                       color: Colors.purple,
-                      title: 'Krása, šport a voľný čas',
-                      text: 'Kozmetička, kaderníčka, masér, tréner, '
-                          'inštruktor plávania, inštruktorka tanca, '
-                          'fotograf, organizátor podujatí.',
+                      title: 'aboutApp_prof_beauty_title'.tr(),
+                      text: 'aboutApp_prof_beauty_text'.tr(),
                       last: true),
 
                     const SizedBox(height: 12),
@@ -278,9 +256,7 @@ class AboutAppScreen extends StatelessWidget {
                               size: 16, color: _kPrimary)),
                         const SizedBox(width: 10),
                         Expanded(child: Text(
-                          'Nezáleží na tom, či ste profesionál alebo '
-                          'si chcete len privyrobiť — Susedko je miesto, '
-                          'kde si vás zákazníci jednoducho nájdu.',
+                          'aboutApp_professions_footer'.tr(),
                           style: TextStyle(fontSize: 12,
                               color: Colors.grey.shade700, height: 1.5))),
                       ])),
@@ -290,24 +266,24 @@ class AboutAppScreen extends StatelessWidget {
                 // ── Kontakt ───────────────────────────────────────────────
                 _sectionCard(
                   icon: Icons.support_agent_outlined,
-                  title: 'Kontakt & podpora',
+                  title: 'aboutApp_contact_title'.tr(),
                   child: Column(children: [
                     _contactRow(Icons.email_outlined,
-                        'info@susedko.com'),
+                        'support_email'.tr()),
                     _contactRow(Icons.phone_outlined,
-                        '+421 952 452 052'),
+                        'support_phone'.tr()),
                     _contactRow(Icons.language_outlined,
-                        'www.susedko.com'),
+                        'aboutApp_contact_website'.tr()),
                   ])),
 
                 const SizedBox(height: 20),
 
                 // ── Verzia ────────────────────────────────────────────────
-                Text('verzia 1.0.0',
+                Text('aboutApp_version'.tr(namedArgs: {'version': '1.0.0'}),
                     style: TextStyle(
                         fontSize: 12, color: Colors.grey.shade400)),
                 const SizedBox(height: 4),
-                Text('© 2025 Susedko',
+                Text('aboutApp_copyright'.tr(namedArgs: {'year': '2025'}),
                     style: TextStyle(
                         fontSize: 12, color: Colors.grey.shade400)),
               ]))),

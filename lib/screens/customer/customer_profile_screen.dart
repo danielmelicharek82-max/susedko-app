@@ -10,7 +10,7 @@ import 'dart:io';
 
 import '../login_screen.dart';
 import 'about_app_screen.dart';
-import '../auth/craftsman_register_form.dart';
+import '../auth/craftsman_register_form.dart'; // kAllProfessionKeys, kProfessionIcons
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -33,6 +33,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
   bool _loading = true;
   bool _saving  = false;
+  bool _deletingAccount = false;
 
   int _bookingsCount = 0;
   int _reviewsCount  = 0;
@@ -128,59 +129,61 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         (route) => false);
   }
 
+  // Apple App Store Guideline 5.1.1(v): appka umožňujúca vytvorenie účtu
+  // musí ponúkať aj jeho trvalé vymazanie priamo v appke.
   Future<void> _deleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
-          'Are you sure you want to permanently delete your account? '
-          'This action cannot be undone and all your data will be lost.'),
+        title: Text('deleteAccountTitle'.tr()),
+        content: Text('deleteAccountConfirmMsg'.tr()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete Account')),
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text('deleteAccountTitle'.tr())),
         ],
       ),
     );
-
     if (confirmed != true) return;
 
+    setState(() => _deletingAccount = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       final uid = user.uid;
-      final db = FirebaseFirestore.instance;
+      final db  = FirebaseFirestore.instance;
 
-      // Vymazanie profilu
+      // 1) Zmazanie profilových a súvisiacich dát. Tieto operácie sú
+      // idempotentné — ak by sa nižšie neskôr zopakovali (napr. po
+      // re-autentifikácii), zmazanie už neexistujúcich dokumentov jednoducho
+      // nič neurobí.
       await db.collection('users').doc(uid).delete();
       await db.collection('customers').doc(uid).delete();
 
-      // Vymazanie bookings zákazníka
       final bookings = await db.collection('bookings')
           .where('customerId', isEqualTo: uid).get();
       for (final doc in bookings.docs) {
         await doc.reference.delete();
       }
 
-      // Vymazanie reviews zákazníka
       final reviews = await db.collection('reviews')
           .where('customerId', isEqualTo: uid).get();
       for (final doc in reviews.docs) {
         await doc.reference.delete();
       }
 
-      // Vymazanie profilovej fotky zo Storage
       try {
         await FirebaseStorage.instance
             .ref().child('users/$uid/profile.jpg').delete();
       } catch (_) {}
 
-      // Vymazanie Firebase Auth účtu
+      // 2) Zmazanie samotného Firebase Auth účtu — musí byť POSLEDNÉ, lebo
+      // Firestore pravidlá vyššie sa spoliehajú na request.auth.uid, ktorý
+      // po zmazaní Auth účtu prestane existovať.
       await user.delete();
 
       if (!mounted) return;
@@ -188,23 +191,35 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false);
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _deletingAccount = false);
       if (e.code == 'requires-recent-login') {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-            'For security, please log out and log in again before deleting your account.'),
-          backgroundColor: Colors.orange));
+        // Dáta boli už zmazané vyššie (mazanie je idempotentné); zostáva
+        // len Auth účet. Odhlásime používateľa a po opätovnom prihlásení
+        // druhé stlačenie "Vymazať účet" operáciu bezpečne dokončí.
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('deleteAccountReauthTitle'.tr()),
+            content: Text('deleteAccountReauthMsg'.tr()),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('ok'.tr())),
+            ],
+          ),
+        );
+        await _logout();
       } else {
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: ${e.message}'),
-          backgroundColor: Colors.red));
+            content: Text('${'error'.tr()}: ${e.message}'),
+            backgroundColor: Colors.red));
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() => _deletingAccount = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Error: $e'),
-        backgroundColor: Colors.red));
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -244,6 +259,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.04),
                         shape: BoxShape.circle))),
+                  // Avatar + name
                   Positioned.fill(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -256,33 +272,45 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                               width: 84, height: 84,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
+                                border: Border.all(
+                                    color: Colors.white, width: 3),
                                 boxShadow: [BoxShadow(
                                     color: Colors.black.withOpacity(0.2),
                                     blurRadius: 12)]),
                               child: ClipOval(child: _newImage != null
                                   ? Image.file(_newImage!, fit: BoxFit.cover)
                                   : _profileImageUrl != null
-                                      ? Image.network(_profileImageUrl!, fit: BoxFit.cover)
+                                      ? Image.network(_profileImageUrl!,
+                                          fit: BoxFit.cover)
                                       : Container(
                                           color: _kPrimary.withOpacity(0.2),
-                                          child: const Icon(Icons.person, size: 40, color: Colors.white)))),
+                                          child: const Icon(Icons.person,
+                                              size: 40,
+                                              color: Colors.white)))),
                             Positioned(bottom: 2, right: 2,
                               child: Container(
                                 width: 24, height: 24,
                                 decoration: BoxDecoration(
-                                  color: Colors.white, shape: BoxShape.circle,
-                                  border: Border.all(color: _kPrimary, width: 2)),
-                                child: const Icon(Icons.camera_alt, size: 12, color: _kPrimary))),
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: _kPrimary, width: 2)),
+                                child: const Icon(Icons.camera_alt,
+                                    size: 12, color: _kPrimary))),
                           ])),
                         const SizedBox(height: 10),
                         Text(_nameController.text.isNotEmpty
                             ? _nameController.text : 'name'.tr(),
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Text(FirebaseAuth.instance.currentUser?.email ?? '',
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                        Text(
+                          FirebaseAuth.instance.currentUser?.email ?? '',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 12)),
                       ])),
                 ])),
             ),
@@ -290,14 +318,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               if (_saving)
                 const Padding(padding: EdgeInsets.all(16),
                   child: SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2)))
               else
                 IconButton(
                   icon: const Icon(Icons.save_outlined, color: Colors.white),
-                  onPressed: _save, tooltip: 'save'.tr()),
+                  onPressed: _save,
+                  tooltip: 'save'.tr()),
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white),
-                onPressed: _logout, tooltip: 'logout'.tr()),
+                onPressed: _logout,
+                tooltip: 'logout'.tr()),
             ],
           ),
         ],
@@ -305,21 +336,28 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 60),
           child: Column(children: [
 
+            // ── Stats ──────────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: _kPrimary.withOpacity(0.07),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(
+                    color: _kPrimary.withOpacity(0.07),
                     blurRadius: 16, offset: const Offset(0, 4))]),
               child: Row(children: [
-                Expanded(child: _statBox(Icons.work_outline, '$_bookingsCount',
+                Expanded(child: _statBox(
+                    Icons.work_outline, '$_bookingsCount',
                     'bookingsCount'.tr(), _kPrimary)),
-                Container(width: 1, height: 50, color: Colors.grey.shade200),
-                Expanded(child: _statBox(Icons.star_outline, '$_reviewsCount',
+                Container(width: 1, height: 50,
+                    color: Colors.grey.shade200),
+                Expanded(child: _statBox(
+                    Icons.star_outline, '$_reviewsCount',
                     'reviewsCount'.tr(), Colors.amber)),
               ])),
             const SizedBox(height: 16),
 
+            // ── Name ───────────────────────────────────────────────────────
             _sectionCard(
               title: 'name'.tr(),
               icon: Icons.person_outline_rounded,
@@ -335,47 +373,61 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               )),
             const SizedBox(height: 16),
 
+            // ── Preferred professions ──────────────────────────────────────
             _sectionCard(
               title: 'preferredServices'.tr(),
               icon: Icons.handyman_outlined,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('preferredProfessionsDesc'.tr(),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500, height: 1.4)),
+                    style: TextStyle(fontSize: 12,
+                        color: Colors.grey.shade500, height: 1.4)),
                 const SizedBox(height: 12),
                 Wrap(spacing: 8, runSpacing: 8,
                   children: kAllProfessionKeys.map((key) {
                     final selected = _preferredProfessions.contains(key);
-                    final icon = kProfessionIcons[key] ?? Icons.handyman_outlined;
+                    final icon =
+                        kProfessionIcons[key] ?? Icons.handyman_outlined;
                     return GestureDetector(
                       onTap: () => setState(() {
-                        selected ? _preferredProfessions.remove(key)
+                        selected
+                            ? _preferredProfessions.remove(key)
                             : _preferredProfessions.add(key);
                       }),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
                           color: selected ? _kPrimary : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: selected ? _kPrimary : Colors.grey.shade300,
+                              color: selected
+                                  ? _kPrimary : Colors.grey.shade300,
                               width: selected ? 2 : 1),
                           boxShadow: selected ? [BoxShadow(
                               color: _kPrimary.withOpacity(0.2),
-                              blurRadius: 6, offset: const Offset(0, 2))] : []),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2))] : []),
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           Icon(icon, size: 13,
-                              color: selected ? Colors.white : Colors.grey.shade600),
+                              color: selected
+                                  ? Colors.white : Colors.grey.shade600),
                           const SizedBox(width: 5),
-                          Text(key.tr(), style: TextStyle(fontSize: 12,
-                              color: selected ? Colors.white : Colors.grey.shade700,
-                              fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+                          Text(key.tr(),
+                              style: TextStyle(fontSize: 12,
+                                  color: selected
+                                      ? Colors.white : Colors.grey.shade700,
+                                  fontWeight: selected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal)),
                         ])));
                   }).toList()),
                 if (_preferredProfessions.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: _kPrimary.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(20)),
@@ -389,8 +441,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               ])),
             const SizedBox(height: 16),
 
+            // ── Save button ────────────────────────────────────────────────
             _saving
-                ? const Center(child: CircularProgressIndicator(color: _kPrimary))
+                ? const Center(
+                    child: CircularProgressIndicator(color: _kPrimary))
                 : GestureDetector(
                     onTap: _save,
                     child: Container(
@@ -399,25 +453,34 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [_kDeep, _kPrimary],
-                          begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight),
                         borderRadius: BorderRadius.circular(14),
-                        boxShadow: [BoxShadow(color: _kPrimary.withOpacity(0.3),
-                            blurRadius: 10, offset: const Offset(0, 4))]),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.save_outlined, color: Colors.white, size: 18),
+                        boxShadow: [BoxShadow(
+                          color: _kPrimary.withOpacity(0.3),
+                          blurRadius: 10, offset: const Offset(0, 4))]),
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                        const Icon(Icons.save_outlined,
+                            color: Colors.white, size: 18),
                         const SizedBox(width: 8),
-                        Text('save'.tr(), style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text('save'.tr(),
+                            style: const TextStyle(color: Colors.white,
+                                fontWeight: FontWeight.bold, fontSize: 15)),
                       ]))),
             const SizedBox(height: 12),
 
+            // ── About app ──────────────────────────────────────────────────
             GestureDetector(
               onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AboutAppScreen())),
+                  MaterialPageRoute(
+                      builder: (_) => const AboutAppScreen())),
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(16),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: Colors.grey.shade200)),
                 child: Row(children: [
                   Container(
@@ -425,17 +488,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     decoration: BoxDecoration(
                       color: _kPrimary.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.info_outline, size: 18, color: _kPrimary)),
+                    child: const Icon(Icons.info_outline,
+                        size: 18, color: _kPrimary)),
                   const SizedBox(width: 12),
                   Expanded(child: Text('terms'.tr(),
-                      style: const TextStyle(fontWeight: FontWeight.w500,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500,
                           color: Color(0xFF1E293B)))),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 18),
+                  Icon(Icons.chevron_right,
+                      color: Colors.grey.shade400, size: 18),
                 ])),
             ),
             const SizedBox(height: 12),
 
-            // Logout
+            // ── Logout ─────────────────────────────────────────────────────
             GestureDetector(
               onTap: _logout,
               child: Container(
@@ -445,31 +511,41 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                   color: Colors.red.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: Colors.red.withOpacity(0.3))),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                   const Icon(Icons.logout, color: Colors.red, size: 18),
                   const SizedBox(width: 8),
-                  Text('logout'.tr(), style: const TextStyle(
-                      color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('logout'.tr(),
+                      style: const TextStyle(color: Colors.red,
+                          fontWeight: FontWeight.bold, fontSize: 15)),
                 ]))),
             const SizedBox(height: 12),
 
-            // Delete Account
+            // ── Delete account ─────────────────────────────────────────────
             GestureDetector(
-              onTap: _deleteAccount,
+              onTap: _deletingAccount ? null : _deleteAccount,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.10),
+                  color: Colors.red.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.red.withOpacity(0.5))),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.delete_forever, color: Colors.red, size: 18),
+                  border: Border.all(color: Colors.red.withOpacity(0.3))),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  _deletingAccount
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(
+                              color: Colors.red, strokeWidth: 2))
+                      : const Icon(Icons.delete_forever,
+                          color: Colors.red, size: 18),
                   const SizedBox(width: 8),
-                  const Text('Delete Account', style: TextStyle(
-                      color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('deleteAccountTitle'.tr(),
+                      style: const TextStyle(color: Colors.red,
+                          fontWeight: FontWeight.bold, fontSize: 15)),
                 ]))),
-            const SizedBox(height: 24),
           ]),
         ),
       ),
@@ -480,30 +556,42 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12)),
           child: Icon(icon, color: color, size: 20)),
         const SizedBox(height: 6),
-        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        Text(value, style: TextStyle(
+            fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(
+            fontSize: 12, color: Colors.grey.shade500)),
       ]);
 
-  Widget _sectionCard({required String title, required IconData icon, required Widget child}) =>
+  Widget _sectionCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) =>
       Container(
-        width: double.infinity, padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: _kPrimary.withOpacity(0.05),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(
+              color: _kPrimary.withOpacity(0.05),
               blurRadius: 12, offset: const Offset(0, 3))]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: _kPrimary.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                color: _kPrimary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8)),
               child: Icon(icon, size: 15, color: _kPrimary)),
             const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold,
+            Text(title, style: const TextStyle(
+                fontWeight: FontWeight.bold,
                 fontSize: 14, color: Color(0xFF1E293B))),
           ]),
           const SizedBox(height: 12),

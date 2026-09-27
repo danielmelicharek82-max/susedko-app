@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../models/work_order.dart';
 import '../../services/work_order_service.dart';
+import '../chat_screen.dart';
 
 
 // ── Helper: čistá sadzba remeselníka (bez 10% poplatku platformy) ──────────
@@ -154,6 +155,7 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
 
             final hours = all.where((o) => [
               WorkOrderStatus.hoursLogged,
+              WorkOrderStatus.daysApproved,
               WorkOrderStatus.hoursApproved,
               WorkOrderStatus.reworkRequested,
               WorkOrderStatus.craftsmanInsisting,
@@ -241,7 +243,7 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             color: statusCfg.color.withOpacity(0.06),
             borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(20))),
-          child: Row(children: [
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Avatar
             Container(
               width: 44, height: 44,
@@ -263,7 +265,10 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             const SizedBox(width: 12),
             Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(customerName, style: const TextStyle(
+              Text(customerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                   fontWeight: FontWeight.bold, fontSize: 15,
                   color: Color(0xFF1E293B))),
               const SizedBox(height: 2),
@@ -271,27 +276,64 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
                 Icon(Icons.access_time_rounded,
                     size: 12, color: Colors.grey.shade400),
                 const SizedBox(width: 4),
-                Text(dateStr, style: TextStyle(
+                Flexible(child: Text(dateStr,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
                     color: Colors.grey.shade500,
-                    fontSize: 12, fontWeight: FontWeight.w500)),
+                    fontSize: 12, fontWeight: FontWeight.w500))),
               ]),
             ])),
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: statusCfg.color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: statusCfg.color.withOpacity(0.3))),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(statusCfg.icon, size: 11, color: statusCfg.color),
-                const SizedBox(width: 4),
-                Text(statusCfg.label, style: TextStyle(
-                    color: statusCfg.color, fontSize: 11,
-                    fontWeight: FontWeight.bold)),
-              ])),
+            const SizedBox(width: 8),
+            // ── Chat + status badge — POD SEBOU, nie vedľa seba ──────────
+            // Predtým boli chat ikona a badge vedľa seba v tom istom Row;
+            // pri dlhšom mene zákazníka + dlhšom preloženom texte statusu
+            // (napr. anglické "Payment due") sa už nezmestili a Row
+            // pretekal (RIGHT OVERFLOWED). Vodorovný nárok na miesto teraz
+            // určuje len ŠIRŠÍ z dvoch prvkov (zvyčajne badge), nie ich
+            // súčet — a celý blok je navyše vo Flexible, takže ani
+            // extrémne dlhý preložený text nikdy nepretečie mimo karty
+            // (v krajnom prípade sa text v badge skráti výpustkou).
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: statusCfg.color.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: statusCfg.color.withOpacity(0.3))),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(statusCfg.icon, size: 11, color: statusCfg.color),
+                      const SizedBox(width: 4),
+                      Flexible(child: Text(statusCfg.label,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: TextStyle(
+                              color: statusCfg.color, fontSize: 11,
+                              fontWeight: FontWeight.bold))),
+                    ])),
+                  const SizedBox(height: 6),
+                  // Chat s zákazníkom
+                  GestureDetector(
+                    onTap: () => showServiceRequestChat(context,
+                        requestId: o.id,
+                        customerId: o.customerId,
+                        craftsmanId: _craftsmanId!,
+                        otherUserName: customerName),
+                    child: Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: _kPrimary.withOpacity(0.1),
+                        shape: BoxShape.circle),
+                      child: Icon(Icons.chat_bubble_outline_rounded,
+                          size: 16, color: _kPrimary)),
+                  ),
+                ])),
           ])),
 
         // ── Obsah ────────────────────────────────────────────────────────
@@ -302,7 +344,9 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
 
             // Info riadky
             if (o.profession != null)
-              _infoChip(Icons.handyman_rounded, o.profession!,
+              _infoChip(Icons.handyman_rounded,
+                  o.profession!.startsWith('prof_')
+                      ? o.profession!.tr() : o.profession!,
                   _kPrimary.withOpacity(0.08), _kPrimary),
             if (o.description != null) ...[
               const SizedBox(height: 6),
@@ -406,6 +450,7 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
         ]);
 
       case WorkOrderStatus.inProgress:
+        if (o.isMultiDay) return _buildDailyLogsSection(o);
         return Column(children: [
           _infoBanner(
             icon: Icons.construction_outlined,
@@ -427,6 +472,18 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
           color: Colors.orange,
           title: 'workOrders_hours_sent_title'.tr(),
           text: 'workOrders_hours_sent_desc'.tr(),
+          showSupport: false);
+
+      // ── VIACDŇOVÁ ZÁKAZKA: všetky dni schválené, čaká sa na výber
+      //    platby zákazníkom (rovnaké UX ako hoursApproved s
+      //    paymentMode == null nižšie — text sa preto zámerne
+      //    zhoduje s 'craftsman_hoursApproved_pending' vetvou) ────────
+      case WorkOrderStatus.daysApproved:
+        return _statusBox(
+          icon: Icons.check_circle_outline,
+          color: Colors.teal,
+          title: 'hoursApproved_title'.tr(),
+          text: 'craftsman_hoursApproved_pending'.tr(),
           showSupport: false);
 
       // ── NOVÉ: hodiny schválené, čaká na výber platby zákazníkom ─────────
@@ -705,6 +762,374 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
           Text(text, style: TextStyle(
               fontSize: 13, color: fg, fontWeight: FontWeight.w600)),
         ]));
+
+  // ── Viacdňová zákazka: zoznam dní s vlastným mini-cyklom ───────────────────
+  Widget _buildDailyLogsSection(WorkOrder o) {
+    final days = o.sortedDailyLogs;
+    final approvedCount = o.approvedDaysCount;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _infoBanner(
+        icon: Icons.event_repeat_outlined,
+        color: Colors.green,
+        title: 'workOrders_multiday_title'.tr(
+            namedArgs: {'approved': '$approvedCount', 'total': '${days.length}'}),
+        text: 'workOrders_multiday_desc'.tr()),
+      const SizedBox(height: 12),
+      ...days.map((entry) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: _dailyLogRow(o, entry.key, entry.value))),
+    ]);
+  }
+
+  Widget _dailyLogRow(WorkOrder o, String dateKey, DailyLog log) {
+    final day = DateTime.parse(dateKey);
+    final dateLabel = DateFormat('EEE d. MMM').format(day);
+
+    late final IconData icon;
+    late final Color color;
+    late final String title;
+    Widget? extra;
+
+    switch (log.status) {
+      case DailyLogStatus.notLogged:
+        icon = Icons.timer_outlined; color = Colors.grey.shade600;
+        title = 'workOrders_day_not_logged'.tr();
+        extra = _primaryBtn(
+          label: 'workOrders_log_hours'.tr(),
+          icon: Icons.timer_outlined,
+          color: Colors.green,
+          fullWidth: true,
+          onTap: () => _showLogDailyHoursDialog(o, day));
+        break;
+      case DailyLogStatus.logged:
+        icon = Icons.hourglass_top_rounded; color = Colors.orange;
+        title = 'workOrders_day_logged'.tr(namedArgs: {
+          'hours': log.hours?.toStringAsFixed(1) ?? '?'});
+        break;
+      case DailyLogStatus.approved:
+        icon = Icons.check_circle_rounded; color = Colors.green;
+        title = 'workOrders_day_approved'.tr(namedArgs: {
+          'hours': log.hours?.toStringAsFixed(1) ?? '?'});
+        break;
+      case DailyLogStatus.reworkRequested:
+        icon = Icons.refresh_rounded; color = Colors.orange.shade800;
+        title = 'workOrders_day_rework'.tr();
+        extra = Column(children: [
+          if (log.reworkNote != null && log.reworkNote!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('„${log.reworkNote}"', style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade700,
+                  fontStyle: FontStyle.italic))),
+          _primaryBtn(
+            label: 'workOrders_rework_btn'.tr(),
+            icon: Icons.edit_rounded,
+            color: _kPrimary,
+            fullWidth: true,
+            onTap: () => _showLogDailyHoursDialog(o, day, isRework: true)),
+          const SizedBox(height: 8),
+          _outlineBtn(
+            label: 'workOrders_insist_btn'.tr(),
+            color: Colors.red,
+            fullWidth: true,
+            onTap: () => _showInsistDailyDialog(o, day, log)),
+        ]);
+        break;
+      case DailyLogStatus.craftsmanInsisting:
+        icon = Icons.hourglass_empty_rounded; color = Colors.red;
+        title = 'workOrders_day_insisting'.tr();
+        break;
+      case DailyLogStatus.disputed:
+        icon = Icons.admin_panel_settings_outlined; color = Colors.red.shade700;
+        title = 'workOrders_day_disputed'.tr();
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 15, color: color)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(dateLabel, style: TextStyle(fontSize: 11,
+                color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+            Text(title, style: TextStyle(fontSize: 13,
+                fontWeight: FontWeight.bold, color: color)),
+          ])),
+        ]),
+        if (extra != null) ...[const SizedBox(height: 10), extra],
+      ]));
+  }
+
+  // ── Dialog: zadaj hodiny za jeden deň (viacdňová zákazka) ──────────────────
+  Future<void> _showLogDailyHoursDialog(WorkOrder o, DateTime day,
+      {bool isRework = false}) async {
+    final key = WorkOrderService.dateKeyFor(day);
+    final existing = o.dailyLogs[key];
+    // Denný strop je pevné, rozumné číslo (16h) — netreba ho škálovať
+    // podľa dĺžky celej zákazky, keďže sa teraz zadáva vždy len za
+    // JEDEN konkrétny deň, nie za celý rozsah naraz.
+    // Minimum je 0 (nie 0.5) — pri viacdňovej zákazke musí byť možné
+    // zadať aj 0 hodín, napr. keď sa zákazka skráti alebo sa v daný deň
+    // vôbec nepracovalo. Pri jednodňovej zákazke (_showLogHoursDialog
+    // nižšie) minimum 0,5 ostáva, keďže tam 0 hodín nedáva zmysel —
+    // taká zákazka by fakticky vôbec neprebehla.
+    double hours = existing?.hours ?? 8.0;
+    final noteController = TextEditingController(
+        text: isRework ? existing?.craftsmanNote ?? '' : '');
+    final rate = o.netHourlyRate ?? _myHourlyRate ?? 0;
+    final dateLabel = DateFormat('EEEE d. MMM').format(day);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setBS) => Container(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(margin: const EdgeInsets.only(top: 8, bottom: 20),
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2))),
+
+                Text(
+                  isRework
+                      ? 'workOrders_rework_btn'.tr()
+                      : 'workOrders_log_hours_dialog_title'.tr(),
+                  style: const TextStyle(fontSize: 20,
+                      fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(dateLabel, style: TextStyle(fontSize: 13,
+                    color: Colors.grey.shade500)),
+
+                if (isRework && existing?.reworkNote != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200)),
+                    child: Row(children: [
+                      Icon(Icons.chat_bubble_outline,
+                          size: 14, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('„${existing!.reworkNote}"',
+                          style: TextStyle(fontSize: 12,
+                              color: Colors.orange.shade800,
+                              fontStyle: FontStyle.italic))),
+                    ])),
+                ],
+                const SizedBox(height: 24),
+
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [_kDeep, _kPrimary],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(16)),
+                  child: Column(children: [
+                    Text('workOrders_hours_label'.tr(namedArgs: {'hours': hours.toStringAsFixed(1)}),
+                        style: const TextStyle(color: Colors.white70,
+                            fontSize: 14)),
+                    Text('${(hours * rate).toStringAsFixed(2)} €',
+                        style: const TextStyle(color: Colors.white,
+                            fontSize: 32, fontWeight: FontWeight.bold)),
+                    Text('${rate.toStringAsFixed(0)} €/hod',
+                        style: const TextStyle(color: Colors.white54,
+                            fontSize: 12)),
+                  ])),
+                const SizedBox(height: 20),
+
+                Row(children: [
+                  _stepperBtn(Icons.remove_rounded,
+                      hours > 0
+                          ? () => setBS(() =>
+                              hours = (hours - 0.5).clamp(0, 16))
+                          : null),
+                  Expanded(child: Slider(
+                      value: hours, min: 0, max: 16, divisions: 32,
+                      activeColor: _kPrimary,
+                      onChanged: (v) => setBS(() => hours = v))),
+                  _stepperBtn(Icons.add_rounded,
+                      hours < 16
+                          ? () => setBS(() =>
+                              hours = (hours + 0.5).clamp(0, 16))
+                          : null),
+                ]),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: noteController,
+                  decoration: InputDecoration(
+                    hintText: isRework ? 'workOrders_rework_note_hint'.tr() : 'workOrders_hours_note_hint'.tr(),
+                    filled: true, fillColor: Colors.grey.shade50,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                            color: Colors.grey.shade200)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                            color: Colors.grey.shade200)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: _kPrimary, width: 2)))),
+                const SizedBox(height: 16),
+
+                SizedBox(width: double.infinity, child: _primaryBtn(
+                  label: isRework ? 'workOrders_hours_send_rework'.tr() : 'workOrders_confirm_hours_btn'.tr(),
+                  icon: Icons.send_rounded,
+                  color: _kPrimary,
+                  fullWidth: true,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await WorkOrderService.logDailyHours(
+                      orderId: o.id, day: day, hours: hours,
+                      hourlyRate: rate * 1.1,
+                      note: noteController.text.trim().isEmpty
+                          ? null : noteController.text.trim());
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(isRework ? 'workOrders_hours_rework_snack'.tr() : 'workOrders_hours_snack2'.tr()),
+                            backgroundColor: Colors.green));
+                  })),
+              ]),
+            ),
+          ))));
+  }
+
+  // ── Dialog: trvám na hodinách za jeden deň (viacdňová zákazka) ─────────────
+  Future<void> _showInsistDailyDialog(
+      WorkOrder o, DateTime day, DailyLog log) async {
+    final ctrl = TextEditingController();
+    final dateLabel = DateFormat('EEEE d. MMM').format(day);
+    final netTotal = (log.hours != null && o.netHourlyRate != null)
+        ? log.hours! * o.netHourlyRate! : null;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.gavel_outlined,
+                      color: Colors.red.shade600, size: 22)),
+                const SizedBox(width: 12),
+                Expanded(child: Text('workOrders_insist_title'.tr(),
+                    style: TextStyle(fontSize: 18,
+                        fontWeight: FontWeight.bold))),
+              ]),
+              const SizedBox(height: 4),
+              Text(dateLabel, style: TextStyle(fontSize: 13,
+                  color: Colors.grey.shade500)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('workOrders_insist_hours_label'.tr(),
+                      style: TextStyle(fontSize: 12,
+                          color: Colors.grey.shade500)),
+                  Text(
+                    '${log.hours?.toStringAsFixed(1)} hod'
+                    ' = ${netTotal?.toStringAsFixed(2) ?? '?'} € (vaša odmena)',
+                    style: const TextStyle(fontSize: 18,
+                        fontWeight: FontWeight.bold, color: _kPrimary)),
+                ])),
+              const SizedBox(height: 12),
+              Text('workOrders_insist_escalate_desc'.tr(),
+                style: TextStyle(fontSize: 13,
+                    color: Colors.grey.shade600, height: 1.5)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl, maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'workOrders_insist_reason_hint'.tr(),
+                  filled: true, fillColor: Colors.grey.shade50,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade200)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade200)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: _kPrimary, width: 2)))),
+              const SizedBox(height: 12),
+              _supportContactBox(),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('cancel'.tr()))),
+                const SizedBox(width: 8),
+                Expanded(child: _primaryBtn(
+                  label: 'workOrders_pending_confirm'.tr(),
+                  icon: Icons.gavel_outlined,
+                  color: Colors.red,
+                  onTap: () => Navigator.pop(ctx, true))),
+              ]),
+            ]),
+          ),
+        )));
+
+    if (confirmed == true && mounted) {
+      if (ctrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('workOrders_insist_reason_required'.tr()),
+                backgroundColor: Colors.orange));
+        return;
+      }
+      await WorkOrderService.insistOnDailyHours(
+          orderId: o.id, day: day, reason: ctrl.text.trim());
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('workOrders_insist_snack'.tr()),
+              backgroundColor: Colors.orange));
+    }
+  }
 
   // ── Dialog: zadaj hodiny ───────────────────────────────────────────────────
   Future<void> _showLogHoursDialog(WorkOrder o,
@@ -1003,6 +1428,8 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
         _StatusCfg(Colors.purple, Icons.construction_rounded, 'status_in_progress'.tr()),
       WorkOrderStatus.hoursLogged =>
         _StatusCfg(Colors.teal, Icons.timer_rounded, 'workOrders_tab_hours'.tr()),
+      WorkOrderStatus.daysApproved =>
+        _StatusCfg(Colors.teal, Icons.check_circle_rounded, 'hoursApproved_title'.tr()),
       WorkOrderStatus.hoursApproved =>
         _StatusCfg(Colors.teal, Icons.check_circle_rounded, 'workOrders_hours_approved_badge'.tr()),
       WorkOrderStatus.reworkRequested =>

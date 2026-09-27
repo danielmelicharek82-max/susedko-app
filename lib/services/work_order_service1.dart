@@ -16,11 +16,6 @@ class WorkOrderService {
       '${d.year}-${d.month.toString().padLeft(2, '0')}'
       '-${d.day.toString().padLeft(2, '0')}';
 
-  // Verejný wrapper — UI obrazovky potrebujú vedieť skonštruovať ten
-  // istý "yyyy-MM-dd" kľúč, aký sa používa v dailyLogs mape (napr. pri
-  // vyhľadaní existujúceho DailyLog záznamu pre konkrétny deň).
-  static String dateKeyFor(DateTime d) => _dateKey(d);
-
   static String _timeStr(DateTime d) =>
       '${d.hour.toString().padLeft(2, '0')}:'
       '${d.minute.toString().padLeft(2, '0')}';
@@ -139,102 +134,6 @@ class WorkOrderService {
       if (note != null) 'craftsmanNote': note,
       'reworkNote': null,
       'craftsmanInsistNote': null,
-    });
-  }
-
-  // ── VIACDŇOVÉ ZÁKAZKY: per-deň zadávanie/schvaľovanie hodín ───────────────
-  // Priamy zápis do dailyLogs.{dateKey}.* — presne rovnaký vzor priameho
-  // klientskeho zápisu ako logHours()/approveHours() vyššie pre jednodňové
-  // zákazky. Cloud Function `onWorkOrderDailyLogsChanged` (index.js) po
-  // každej zmene skontroluje, či sú už schválené úplne všetky dni, a ak
-  // áno, sama posunie celú objednávku do hoursApproved (výber platby) —
-  // klient sem nič ďalšie posielať nemusí.
-  //
-  // Sadzba (hourlyRate) je vždy rovnaká pre celú objednávku — ukladá sa
-  // pri každom dni len ako pohodlná kópia pre prepočet, nemení sa deň
-  // od dňa.
-
-  static Future<void> logDailyHours({
-    required String orderId,
-    required DateTime day,
-    required double hours,
-    required double hourlyRate,
-    String? note,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.logged.name,
-      'dailyLogs.$key.hours': hours,
-      'dailyLogs.$key.rate': hourlyRate,
-      'dailyLogs.$key.craftsmanNote': note,
-      'dailyLogs.$key.reworkNote': null,
-      'dailyLogs.$key.craftsmanInsistNote': null,
-      'dailyLogs.$key.disputeNote': null,
-      'dailyLogs.$key.loggedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  static Future<void> approveDailyHours({
-    required String orderId,
-    required DateTime day,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.approved.name,
-      'dailyLogs.$key.approvedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  static Future<void> requestDailyRework({
-    required String orderId,
-    required DateTime day,
-    required String customerNote,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.reworkRequested.name,
-      'dailyLogs.$key.reworkNote': customerNote,
-    });
-  }
-
-  static Future<void> insistOnDailyHours({
-    required String orderId,
-    required DateTime day,
-    required String reason,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.craftsmanInsisting.name,
-      'dailyLogs.$key.craftsmanInsistNote': reason,
-    });
-  }
-
-  // Zákazník napokon akceptuje remeselníkom trvané hodiny (bez sporu).
-  static Future<void> acceptDailyDespiteInsistence({
-    required String orderId,
-    required DateTime day,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.approved.name,
-      'dailyLogs.$key.approvedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  // Eskalácia sporu na admina — blokuje len TENTO deň, ostatné dni v
-  // rozsahu môžu naďalej pokračovať svojou vlastnou cestou (zadanie,
-  // schválenie...) nezávisle. Pozri rozhodnutie v návrhu: jeden sporný
-  // deň nesmie zablokovať celú viacdňovú zákazku.
-  static Future<void> escalateDailyToAdmin({
-    required String orderId,
-    required DateTime day,
-    String? finalNote,
-  }) async {
-    final key = _dateKey(day);
-    await _db.collection(_col).doc(orderId).update({
-      'dailyLogs.$key.status': DailyLogStatus.disputed.name,
-      if (finalNote != null && finalNote.isNotEmpty)
-        'dailyLogs.$key.disputeNote': finalNote,
     });
   }
 

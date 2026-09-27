@@ -186,7 +186,7 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen>
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             _infoChip(Icons.handyman_outlined,
-                '$profLabel — ${r.category}',
+                profLabel,
                 _kPrimary.withOpacity(0.08), _kPrimary),
             const SizedBox(height: 8),
             Container(
@@ -321,7 +321,7 @@ class _CustomerRequestsScreenState extends State<CustomerRequestsScreen>
               ])),
             const SizedBox(width: 8),
             // Kategória — Expanded aby nepretiekla
-            Expanded(child: Text(r.category,
+            Expanded(child: Text(r.category.tr(),
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12))),
             const SizedBox(width: 8),

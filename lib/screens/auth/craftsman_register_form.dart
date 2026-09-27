@@ -25,6 +25,12 @@ const List<String> kAllProfessionKeys = [
   'prof_strechar',
   'prof_tesar',
   'prof_studniar',
+  'prof_klimatizaciar',
+  'prof_chladiar',
+  'prof_revizny_technik',
+  'prof_bleskozvodar',
+  'prof_alarmy_kamery',
+  'prof_fotovoltika',
 
   // 🏗️ STAVEBNÍCTVO
   'prof_murar',
@@ -33,84 +39,139 @@ const List<String> kAllProfessionKeys = [
   'prof_dlazdic_exterier',
   'prof_podlahar',
   'prof_maliar',
+  'prof_fasadar',
+  'prof_izolater',
+  'prof_buracie_prace',
+  'prof_oknar',
+  'prof_montaz_dveri',
+  'prof_lecenar',
+  'prof_betonar',
+  'prof_zeleziar',
 
   // 🪵 DREVO & VÝROBA
   'prof_stolar',
   'prof_montaz_nabytku',
+  'prof_montaz_kuchyn',
   'prof_calunik',
   'prof_restaurator',
 
   // ⚙️ OPRAVY & SERVIS
+  'prof_hodinovy_manzel',
   'prof_oprava_spotrebicov',
   'prof_oprava_naradia',
+  'prof_servis_kotlov',
+  'prof_servis_klimatizacii',
+  'prof_servis_okien',
+  'prof_servis_bazenov',
+  'prof_servis_pc',
+  'prof_servis_mobilov',
   'prof_brusic_nozov',
   'prof_lakyrnik',
   'prof_cykloopravar',
   'prof_automechanik',
+  'prof_pneuservis',
+  'prof_autoklampiar',
+  'prof_autoelektrikar',
+
+  // 🚚 DOPRAVA
+  'prof_stahovacie_sluzby',
+  'prof_vypratavanie',
+  'prof_kurier',
+  'prof_dovoz_materialu',
+  'prof_odtahova_sluzba',
 
   // 🌿 EXTERIÉR / POZEMOK
   'prof_zahradnik',
   'prof_bagrista',
   'prof_traktorista',
   'prof_drevorubac',
+  'prof_arborista',
   'prof_plotar',
+  'prof_dlazba_zamkova',
+  'prof_bazenar',
+  'prof_zavlahy',
 
   // 🧹 DOMÁCNOSŤ & STAROSTLIVOSŤ
   'prof_upratovanie',
   'prof_pomoc_domacnosti',
+  'prof_umyvanie_okien',
+  'prof_tepovanie',
+  'prof_zehlenie',
+  'prof_deratizacia',
+  'prof_dezinsekcia',
   'prof_opatrovatelka_seniorov',
   'prof_opatrovatelka_deti',
   'prof_starostlivost_zvierata',
+  'prof_psi_strihac',
+  'prof_vycvik_psov',
 
   // 🏥 ZDRAVIE & WELLNESS
   'prof_zdravotny_asistent',
   'prof_fyzioterapeut',
   'prof_maser',
   'prof_psycholog',
+  'prof_nutricny_terapeut',
+  'prof_logoped',
+  'prof_ergoterapeut',
 
   // 💄 BEAUTY & KOZMETIKA
   'prof_kozmeticka',
   'prof_kadernicka',
-  'prof_vizazistka',
   'prof_barberka',
+  'prof_vizazistka',
   'prof_nechtarka',
   'prof_pedikerka',
   'prof_lash_stylistka',
   'prof_brow_stylistka',
   'prof_skin_expert',
-  'prof_beauty_konzultantka',
+  'prof_permanentny_makeup',
+  'prof_piercer',
   'prof_spa_terapeutka',
 
-  // 🍰 GASTRO
+  // 🍽️ GASTRO
   'prof_kuchar',
   'prof_cukrar',
   'prof_pekar',
+  'prof_catering',
+  'prof_barman',
+  'prof_grilmajster',
 
   // 🎓 VZDELÁVANIE
   'prof_doucovatel',
   'prof_lektor',
+  'prof_jazykovy_lektor',
+  'prof_hudobny_ucitel',
+  'prof_instruktor_jazdy',
 
-  // 🎭 VOĽNÝ ČAS & SLUŽBY
+  // 🎭 VOĽNÝ ČAS & MÉDIÁ
   'prof_fotograf',
+  'prof_kameraman',
+  'prof_dj',
+  'prof_hudobnik',
   'prof_tater',
   'prof_instruktor_plavania',
   'prof_instruktorka_tanca',
   'prof_trener',
   'prof_organizator_podujati',
+  'prof_grafik',
+  'prof_webdesigner',
+  'prof_programator',
+  'prof_pilot',
 
   // 💼 PROFESIONÁLNE SLUŽBY
   'prof_pravnik',
   'prof_uctovnik',
+  'prof_notar',
+  'prof_financny_poradca',
+  'prof_realitny_makler',
+  'prof_poistny_poradca',
+  'prof_prekladatel',
 
-  // 🐄 TRADIČNÉ REMESLÁ / VIDIEK
-  'prof_koziar',
+  // 🐄 TRADIČNÉ REMESLÁ
   'prof_kovac',
-  'prof_kosikar',
   'prof_hrnciar',
-  'prof_sindliar',
-  'prof_veterinar_hospodarske',
-  'prof_strihac_oviec',
   'prof_podkuvac_koni',
+  'prof_veterinar_hospodarske',
 ];
 
 
@@ -130,6 +191,12 @@ const Map<String, IconData> kProfessionIcons = {
   'prof_strechar': Icons.roofing_outlined,
   'prof_tesar': Icons.carpenter_outlined,
   'prof_studniar': Icons.water_outlined,
+  'prof_klimatizaciar': Icons.ac_unit_outlined,
+  'prof_chladiar': Icons.severe_cold_outlined,
+  'prof_revizny_technik': Icons.fact_check_outlined,
+  'prof_bleskozvodar': Icons.flash_on_outlined,
+  'prof_alarmy_kamery': Icons.security_outlined,
+  'prof_fotovoltika': Icons.solar_power_outlined,
 
   // STAVEBNÍCTVO
   'prof_murar': Icons.foundation_outlined,
@@ -138,76 +205,139 @@ const Map<String, IconData> kProfessionIcons = {
   'prof_dlazdic_exterier': Icons.grid_3x3_outlined,
   'prof_podlahar': Icons.square_foot_outlined,
   'prof_maliar': Icons.format_paint_outlined,
+  'prof_fasadar': Icons.apartment_outlined,
+  'prof_izolater': Icons.layers_outlined,
+  'prof_buracie_prace': Icons.domain_disabled_outlined,
+  'prof_oknar': Icons.window_outlined,
+  'prof_montaz_dveri': Icons.sensor_door_outlined,
+  'prof_lecenar': Icons.stairs_outlined,
+  'prof_betonar': Icons.construction_outlined,
+  'prof_zeleziar': Icons.hardware_outlined,
 
   // DREVO
   'prof_stolar': Icons.carpenter_outlined,
   'prof_montaz_nabytku': Icons.chair_outlined,
+  'prof_montaz_kuchyn': Icons.kitchen_outlined,
   'prof_calunik': Icons.chair_alt_outlined,
   'prof_restaurator': Icons.auto_fix_high_outlined,
 
   // SERVIS
+  'prof_hodinovy_manzel': Icons.handyman_outlined,
   'prof_oprava_spotrebicov': Icons.kitchen_outlined,
   'prof_oprava_naradia': Icons.build_outlined,
+  'prof_servis_kotlov': Icons.local_fire_department_outlined,
+  'prof_servis_klimatizacii': Icons.ac_unit_outlined,
+  'prof_servis_okien': Icons.window_outlined,
+  'prof_servis_bazenov': Icons.pool_outlined,
+  'prof_servis_pc': Icons.computer_outlined,
+  'prof_servis_mobilov': Icons.smartphone_outlined,
   'prof_brusic_nozov': Icons.content_cut_outlined,
   'prof_lakyrnik': Icons.format_paint_outlined,
   'prof_cykloopravar': Icons.pedal_bike_outlined,
   'prof_automechanik': Icons.directions_car_outlined,
+  'prof_pneuservis': Icons.tire_repair_outlined,
+  'prof_autoklampiar': Icons.car_repair_outlined,
+  'prof_autoelektrikar': Icons.electrical_services_outlined,
+
+  // DOPRAVA
+  'prof_stahovacie_sluzby': Icons.local_shipping_outlined,
+  'prof_vypratavanie': Icons.delete_sweep_outlined,
+  'prof_kurier': Icons.delivery_dining_outlined,
+  'prof_dovoz_materialu': Icons.local_shipping_outlined,
+  'prof_odtahova_sluzba': Icons.car_crash_outlined,
 
   // EXTERIÉR
   'prof_zahradnik': Icons.grass_outlined,
   'prof_bagrista': Icons.construction_outlined,
   'prof_traktorista': Icons.agriculture_outlined,
   'prof_drevorubac': Icons.park_outlined,
+  'prof_arborista': Icons.forest_outlined,
   'prof_plotar': Icons.fence_outlined,
+  'prof_dlazba_zamkova': Icons.crop_square_outlined,
+  'prof_bazenar': Icons.pool_outlined,
+  'prof_zavlahy': Icons.opacity_outlined,
 
   // DOMÁCNOSŤ
   'prof_upratovanie': Icons.cleaning_services_outlined,
   'prof_pomoc_domacnosti': Icons.home_outlined,
+  'prof_umyvanie_okien': Icons.wash_outlined,
+  'prof_tepovanie': Icons.cleaning_services_outlined,
+  'prof_zehlenie': Icons.iron_outlined,
+  'prof_deratizacia': Icons.pest_control_rodent_outlined,
+  'prof_dezinsekcia': Icons.pest_control_outlined,
   'prof_opatrovatelka_seniorov': Icons.elderly_outlined,
   'prof_opatrovatelka_deti': Icons.child_care_outlined,
   'prof_starostlivost_zvierata': Icons.pets_outlined,
+  'prof_psi_strihac': Icons.content_cut_outlined,
+  'prof_vycvik_psov': Icons.pets_outlined,
 
   // ZDRAVIE
   'prof_zdravotny_asistent': Icons.medical_services_outlined,
   'prof_fyzioterapeut': Icons.healing_outlined,
   'prof_maser': Icons.spa_outlined,
   'prof_psycholog': Icons.psychology_outlined,
+  'prof_nutricny_terapeut': Icons.restaurant_menu_outlined,
+  'prof_logoped': Icons.record_voice_over_outlined,
+  'prof_ergoterapeut': Icons.accessibility_new_outlined,
 
   // BEAUTY
   'prof_kozmeticka': Icons.face_retouching_natural_outlined,
   'prof_kadernicka': Icons.content_cut_outlined,
-  'prof_vizazistka': Icons.brush_outlined,
   'prof_barberka': Icons.content_cut_outlined,
+  'prof_vizazistka': Icons.brush_outlined,
   'prof_nechtarka': Icons.back_hand_outlined,
   'prof_pedikerka': Icons.spa_outlined,
   'prof_lash_stylistka': Icons.remove_red_eye_outlined,
   'prof_brow_stylistka': Icons.architecture_outlined,
   'prof_skin_expert': Icons.face_outlined,
-  'prof_beauty_konzultantka': Icons.support_agent_outlined,
+  'prof_permanentny_makeup': Icons.brush_outlined,
+  'prof_piercer': Icons.radio_button_unchecked_outlined,
+  'prof_spa_terapeutka': Icons.spa_outlined,
 
   // GASTRO
   'prof_kuchar': Icons.restaurant_outlined,
   'prof_cukrar': Icons.cake_outlined,
   'prof_pekar': Icons.bakery_dining_outlined,
+  'prof_catering': Icons.dinner_dining_outlined,
+  'prof_barman': Icons.local_bar_outlined,
+  'prof_grilmajster': Icons.outdoor_grill_outlined,
 
-  // SLUŽBY
+  // VZDELÁVANIE
+  'prof_doucovatel': Icons.school_outlined,
+  'prof_lektor': Icons.school_outlined,
+  'prof_jazykovy_lektor': Icons.translate_outlined,
+  'prof_hudobny_ucitel': Icons.piano_outlined,
+  'prof_instruktor_jazdy': Icons.drive_eta_outlined,
+
+  // VOĽNÝ ČAS & MÉDIÁ
   'prof_fotograf': Icons.camera_alt_outlined,
+  'prof_kameraman': Icons.videocam_outlined,
+  'prof_dj': Icons.headphones_outlined,
+  'prof_hudobnik': Icons.queue_music_outlined,
   'prof_tater': Icons.brush_outlined,
   'prof_instruktor_plavania': Icons.pool_outlined,
   'prof_instruktorka_tanca': Icons.music_note_outlined,
   'prof_trener': Icons.fitness_center_outlined,
   'prof_organizator_podujati': Icons.event_outlined,
+  'prof_grafik': Icons.palette_outlined,
+  'prof_webdesigner': Icons.web_outlined,
+  'prof_programator': Icons.code_outlined,
+  'prof_pilot': Icons.flight_outlined,
 
   // PROFESIE
   'prof_pravnik': Icons.gavel_outlined,
   'prof_uctovnik': Icons.calculate_outlined,
+  'prof_notar': Icons.approval_outlined,
+  'prof_financny_poradca': Icons.trending_up_outlined,
+  'prof_realitny_makler': Icons.real_estate_agent_outlined,
+  'prof_poistny_poradca': Icons.shield_outlined,
+  'prof_prekladatel': Icons.g_translate_outlined,
 
   // TRADIČNÉ
-  'prof_koziar': Icons.checkroom_outlined,
   'prof_kovac': Icons.hardware_outlined,
-  'prof_kosikar': Icons.shopping_basket_outlined,
   'prof_hrnciar': Icons.circle_outlined,
-  'prof_sindliar': Icons.cabin_outlined,
+  'prof_podkuvac_koni': Icons.pets_outlined,
+  'prof_veterinar_hospodarske': Icons.pets_outlined,
 };
 
 class CraftsmanRegisterForm extends StatefulWidget {

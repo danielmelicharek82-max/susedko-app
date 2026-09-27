@@ -343,6 +343,10 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
     final alreadyInterested = user != null &&
         r.interestedCraftsmanIds.contains(user.uid);
     final interestCount = r.interestedCraftsmanIds.length;
+    final myInterestData = user != null
+        ? r.rawData['interest_${user.uid}'] as Map<String, dynamic>?
+        : null;
+    final customerReply = myInterestData?['customerReply'] as String?;
 
     // ✅ OPRAVA: profession key preložený cez .tr()
     final profLabel = r.profession.startsWith('prof_')
@@ -386,7 +390,7 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                       fontSize: 12, fontWeight: FontWeight.bold))),
             const SizedBox(width: 6),
             // kategória — Expanded aby nepretiekla
-            Expanded(child: Text(r.category,
+            Expanded(child: Text(r.category.tr(),
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     color: Colors.grey.shade600, fontSize: 12))),
@@ -484,22 +488,52 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
               const SizedBox(height: 8),
               // Tlačidlo záujmu
               alreadyInterested
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200)),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.check_circle_rounded,
-                            size: 15, color: Colors.green.shade700),
-                        const SizedBox(width: 6),
-                        Text('openRequests_already_interested'.tr(),
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green.shade700,
-                                fontWeight: FontWeight.w600)),
-                      ]))
+                  ? Column(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.shade200)),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.check_circle_rounded,
+                              size: 15, color: Colors.green.shade700),
+                          const SizedBox(width: 6),
+                          Text('openRequests_already_interested'.tr(),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.w600)),
+                        ])),
+                      if (customerReply != null && customerReply.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _kPrimary.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _kPrimary.withOpacity(0.2))),
+                          child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Icon(Icons.reply_outlined,
+                                size: 14, color: _kPrimary),
+                            const SizedBox(width: 8),
+                            Expanded(child: RichText(
+                                text: TextSpan(
+                                    style: TextStyle(fontSize: 12.5,
+                                        color: _kPrimary, height: 1.4),
+                                    children: [
+                                  TextSpan(
+                                      text: '${'customerReplyLabel'.tr()}: ',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  TextSpan(text: customerReply),
+                                ]))),
+                          ])),
+                      ],
+                    ])
                   : GestureDetector(
                       onTap: () => _expressInterest(r),
                       child: Container(

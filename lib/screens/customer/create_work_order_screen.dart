@@ -41,7 +41,8 @@ class _CreateWorkOrderScreenState
   final _noteController    = TextEditingController();
 
   DateTime _focusedDay  = DateTime.now();
-  DateTime? _selectedDay;
+  DateTime? _selectedDay;   // začiatočný deň rozsahu (aj pri jednodňovej zákazke)
+  DateTime? _rangeEndDay;   // posledný deň rozsahu — null/rovnaký ako _selectedDay = jednodňová zákazka
   String? _selectedSlot;
   Map<String, List<String>> _availability = {};
   bool _loadingSlots = true;
@@ -99,6 +100,29 @@ class _CreateWorkOrderScreenState
 
   bool _hasSlots(DateTime day) => _slotsForDay(day).isNotEmpty;
 
+  // Pri viacdňovej zákazke dni BEZ nastaveného slotu (víkend, voľno v
+  // strede týždňa...) jednoducho NEBLOKUJÚ odoslanie objednávky — server
+  // (createWorkOrder) ich tichým preskočením akceptuje, keďže sa v nich
+  // aj tak nepracuje. Táto funkcia vracia zoznam takých dní LEN kvôli
+  // informačnej poznámke pre zákazníka ("v tieto dni sa nepracuje"),
+  // nie kvôli blokovaniu odoslania.
+  List<DateTime> _freeRangeDays() {
+    if (_selectedDay == null || _rangeEndDay == null) return [];
+    if (isSameDay(_selectedDay, _rangeEndDay)) return [];
+    final free = <DateTime>[];
+    var cursor = DateTime(_selectedDay!.year, _selectedDay!.month, _selectedDay!.day)
+        .add(const Duration(days: 1));
+    final end = DateTime(_rangeEndDay!.year, _rangeEndDay!.month, _rangeEndDay!.day);
+    while (!cursor.isAfter(end)) {
+      if (!_hasSlots(cursor)) free.add(cursor);
+      cursor = cursor.add(const Duration(days: 1));
+    }
+    return free;
+  }
+
+  bool get _isMultiDay =>
+      _selectedDay != null && _rangeEndDay != null && !isSameDay(_selectedDay, _rangeEndDay);
+
   Future<void> _submit() async {
     if (_selectedDay == null || _selectedSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -122,6 +146,13 @@ class _CreateWorkOrderScreenState
       final scheduledAt = DateTime(
         _selectedDay!.year, _selectedDay!.month, _selectedDay!.day,
         int.parse(timeParts[0]), int.parse(timeParts[1]));
+
+      // scheduledEndAt sa posiela len pri skutočne viacdňovom rozsahu —
+      // pri jednodňovej zákazke (rangeEnd == null alebo rovnaký deň) ostáva
+      // null, presne ako doteraz.
+      final scheduledEndAt = _isMultiDay
+          ? DateTime(_rangeEndDay!.year, _rangeEndDay!.month, _rangeEndDay!.day)
+          : null;
 
       final customerDoc = await FirebaseFirestore.instance
           .collection('users').doc(user.uid).get();
@@ -149,6 +180,7 @@ class _CreateWorkOrderScreenState
         note:             _noteController.text.trim().isEmpty
                               ? null : _noteController.text.trim(),
         scheduledAt:      scheduledAt,
+        scheduledEndAt:   scheduledEndAt,
         estimatedHours:   _estimatedHours,
         serviceRequestId: widget.serviceRequestId,
         hourlyRate:       widget.craftsman.displayRate,
@@ -393,7 +425,7 @@ class _CreateWorkOrderScreenState
                           color: _kPrimary.withOpacity(0.2),
                           blurRadius: 6,
                           offset: const Offset(0, 2))] : []),
-                    child: Text(cat, style: TextStyle(fontSize: 13,
+                    child: Text(cat.tr(), style: TextStyle(fontSize: 13,
                         color: sel ? Colors.white : Colors.grey.shade700,
                         fontWeight: sel
                             ? FontWeight.bold : FontWeight.normal))));
@@ -497,19 +529,14 @@ class _CreateWorkOrderScreenState
                       textAlign: TextAlign.center),
                 ])),
                 GestureDetector(
-                  onTap: _estimatedHours < 12
-                      ? () => setState(() => _estimatedHours++)
-                      : null,
+                  onTap: () => setState(() => _estimatedHours++),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _estimatedHours < 12
-                          ? _kPrimary.withOpacity(0.1)
-                          : Colors.grey.shade100,
+                      color: _kPrimary.withOpacity(0.1),
                       shape: BoxShape.circle),
                     child: Icon(Icons.add,
-                        color: _estimatedHours < 12
-                            ? _kPrimary : Colors.grey.shade400,
+                        color: _kPrimary,
                         size: 18))),
               ])),
             const SizedBox(height: 20),
@@ -531,15 +558,28 @@ class _CreateWorkOrderScreenState
                 lastDay:
                     DateTime.now().add(const Duration(days: 180)),
                 focusedDay: _focusedDay,
-                selectedDayPredicate: (day) =>
-                    isSameDay(_selectedDay, day),
-                onDaySelected: (sel, foc) => setState(() {
-                  _selectedDay = sel;
+                rangeSelectionMode: RangeSelectionMode.toggledOn,
+                rangeStartDay: _selectedDay,
+                rangeEndDay: _rangeEndDay,
+                onRangeSelected: (start, end, foc) => setState(() {
+                  _selectedDay = start;
+                  // Pri prvom ťuknutí vráti balíček end ako null — berieme
+                  // to ako jednodňovú zákazku (rangeEnd = rovnaký deň),
+                  // kým používateľ neťukne na druhý deň a nevytvorí rozsah.
+                  _rangeEndDay = end ?? start;
                   _focusedDay = foc;
                   _selectedSlot = null;
                 }),
                 enabledDayPredicate: (day) => _hasSlots(day),
                 calendarStyle: CalendarStyle(
+                  rangeStartTextStyle: const TextStyle(color: Colors.white),
+                  rangeEndTextStyle: const TextStyle(color: Colors.white),
+                  rangeStartDecoration: const BoxDecoration(
+                      color: _kPrimary, shape: BoxShape.circle),
+                  rangeEndDecoration: const BoxDecoration(
+                      color: _kPrimary, shape: BoxShape.circle),
+                  withinRangeDecoration: BoxDecoration(
+                      color: _kPrimary.withOpacity(0.15), shape: BoxShape.circle),
                   selectedDecoration: const BoxDecoration(
                       color: _kPrimary, shape: BoxShape.circle),
                   todayDecoration: BoxDecoration(
@@ -565,6 +605,52 @@ class _CreateWorkOrderScreenState
                   }),
               )),
             const SizedBox(height: 16),
+
+            // ── Rozsah dní: súhrn vybraného rozsahu / varovanie pri
+            //    neplatných dňoch (deň bez dostupnosti v rámci rozsahu) ──
+            if (_isMultiDay) ...[
+              Builder(builder: (context) {
+                final freeDays = _freeRangeDays();
+                if (freeDays.isNotEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.shade50,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.blueGrey.shade100)),
+                    child: Row(children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.blueGrey.shade400, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'V tieto dni remeselník nepracuje, budú preskočené: ${freeDays.map((d) => DateFormat('d.M.').format(d)).join(', ')}.',
+                          style: TextStyle(
+                              color: Colors.blueGrey.shade600, fontSize: 13))),
+                    ]));
+                }
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _kPrimary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    const Icon(Icons.date_range_outlined,
+                        color: _kPrimary, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${DateFormat('d. M.').format(_selectedDay!)} – ${DateFormat('d. M. yyyy').format(_rangeEndDay!)} '
+                        '(${_rangeEndDay!.difference(_selectedDay!).inDays + 1} dni)',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: _kPrimary))),
+                  ]));
+              }),
+              const SizedBox(height: 16),
+            ],
 
             // ── Time slots ─────────────────────────────────────────────
             if (_selectedDay != null) ...[
@@ -686,8 +772,10 @@ class _CreateWorkOrderScreenState
                   ]),
                   const SizedBox(height: 12),
                   _summaryRow(Icons.calendar_today_outlined,
-                      DateFormat('EEE d. MMMM yyyy')
-                          .format(_selectedDay!)),
+                      _isMultiDay
+                          ? '${DateFormat('d. M. yyyy').format(_selectedDay!)} – ${DateFormat('d. M. yyyy').format(_rangeEndDay!)}'
+                          : DateFormat('EEE d. MMMM yyyy')
+                              .format(_selectedDay!)),
                   _summaryRow(Icons.access_time_outlined,
                       _selectedSlot!),
                   _summaryRow(Icons.timer_outlined,
@@ -705,13 +793,15 @@ class _CreateWorkOrderScreenState
             ],
 
             // ── Submit ─────────────────────────────────────────────────
-            GestureDetector(
-              onTap: _submitting ? null : _submit,
+            Builder(builder: (context) {
+              final disabled = _submitting;
+              return GestureDetector(
+              onTap: disabled ? null : _submit,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 decoration: BoxDecoration(
-                  gradient: _submitting
+                  gradient: disabled
                       ? LinearGradient(colors: [
                           Colors.grey.shade400,
                           Colors.grey.shade300])
@@ -720,7 +810,7 @@ class _CreateWorkOrderScreenState
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: _submitting ? [] : [BoxShadow(
+                  boxShadow: disabled ? [] : [BoxShadow(
                     color: _kPrimary.withOpacity(0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 4))]),
@@ -741,7 +831,8 @@ class _CreateWorkOrderScreenState
                         : 'createWorkOrder_submit'.tr(),
                     style: const TextStyle(color: Colors.white,
                         fontWeight: FontWeight.bold, fontSize: 15)),
-                ]))),
+                ])));
+            }),
           ])),
       ),
     );

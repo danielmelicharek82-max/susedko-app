@@ -166,7 +166,7 @@ class _CraftsmanMapScreenState extends State<CraftsmanMapScreen> {
                           color: Colors.grey.shade500, height: 1.5)),
                   const SizedBox(height: 24),
                   GestureDetector(
-                    onTap: geo.init,
+                    onTap: geo.requestLocationOrOpenSettings,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 28, vertical: 14),

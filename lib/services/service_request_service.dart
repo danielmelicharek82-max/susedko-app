@@ -33,7 +33,7 @@ class ServiceRequestService {
   // Editácia broadcast požiadavky
   static Future<void> updateBroadcastRequest({
     required String requestId,
-    required String profession,
+    required List<String> professions,
     required String category,
     required String description,
     String? address,
@@ -42,8 +42,13 @@ class ServiceRequestService {
     required List<String> photoUrls,
     required String timeframe,
   }) async {
+    assert(professions.isNotEmpty && professions.length <= 3,
+        'professions must contain between 1 and 3 items');
     await _db.collection(_col).doc(requestId).update({
-      'profession':  profession,
+      // 'profession' (singulár) sa udržuje kvôli starým queries/UI, ktoré
+      // ešte filtrujú na jednu profesiu — vždy prvá zo zoznamu.
+      'profession':  professions.first,
+      'professions': professions,
       'category':    category,
       'description': description,
       'address':     address,
@@ -114,14 +119,16 @@ class ServiceRequestService {
   }
 
   // Remeselník — otvorené broadcast požiadavky pre jeho profesie
-  // ✅ FIX: whereIn má limit 10 — rozdelíme profesie na chunky a zlúčime streamy
+  // ✅ FIX: whereIn / arrayContainsAny majú limit 10 — chunkujeme a zlúčime streamy.
+  // Dopyty vytvorené pred zavedením viacnásobných profesií majú len singulárne
+  // pole 'profession' (bez 'professions'), preto bežia OBIDVE query varianty
+  // súčasne a výsledky sa zlúčia a deduplikujú podľa id.
   static Stream<List<ServiceRequest>> watchOpenRequests(List<String> professions) {
     if (professions.isEmpty) return const Stream.empty();
 
     final chunks = _chunks(professions, 10);
 
-    // Vytvoríme stream pre každý chunk
-    final streams = chunks.map((chunk) => _db
+    final legacyStreams = chunks.map((chunk) => _db
         .collection(_col)
         .where('status', isEqualTo: 'open')
         .where('type', isEqualTo: 'broadcast')
@@ -130,8 +137,17 @@ class ServiceRequestService {
         .snapshots()
         .map((s) => s.docs.map(ServiceRequest.fromFirestore).toList()));
 
-    // Zlúčime všetky streamy do jedného
-    return StreamZip(streams).map((lists) {
+    final multiStreams = chunks.map((chunk) => _db
+        .collection(_col)
+        .where('status', isEqualTo: 'open')
+        .where('type', isEqualTo: 'broadcast')
+        .where('professions', arrayContainsAny: chunk)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(ServiceRequest.fromFirestore).toList()));
+
+    // Zlúčime všetky streamy (legacy + nové) do jedného
+    return StreamZip([...legacyStreams, ...multiStreams]).map((lists) {
       final all = lists.expand((l) => l).toList();
       // Deduplikácia podľa id
       final seen = <String>{};
@@ -198,21 +214,12 @@ class ServiceRequestService {
   }
 
   // Počet otvorených broadcast požiadaviek pre remeselníka
-  // ✅ FIX: rovnaký chunking ako watchOpenRequests
+  // ✅ Postavené nad watchOpenRequests(), ktorý už rieši dedup naprieč
+  // legacy 'profession' aj novým 'professions' poľom — sčítanie surových
+  // počtov z oboch query variant by dvojnásobne počítalo dopyty, ktoré
+  // zodpovedajú obom (napr. staré dopyty migrované do 'professions').
   static Stream<int> watchOpenRequestsCount(List<String> professions) {
     if (professions.isEmpty) return Stream.value(0);
-
-    final chunks = _chunks(professions, 10);
-
-    final streams = chunks.map((chunk) => _db
-        .collection(_col)
-        .where('status', isEqualTo: 'open')
-        .where('type', isEqualTo: 'broadcast')
-        .where('profession', whereIn: chunk)
-        .snapshots()
-        .map((s) => s.docs.length));
-
-    return StreamZip(streams).map((counts) =>
-        counts.fold(0, (sum, c) => sum + c));
+    return watchOpenRequests(professions).map((list) => list.length);
   }
 }

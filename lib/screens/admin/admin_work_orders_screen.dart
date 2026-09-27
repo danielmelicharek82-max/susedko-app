@@ -126,6 +126,7 @@ class _WorkOrderList extends StatelessWidget {
       case WorkOrderStatus.confirmed:          return _kPrimary;
       case WorkOrderStatus.inProgress:         return Colors.blue;
       case WorkOrderStatus.hoursLogged:        return Colors.purple;
+      case WorkOrderStatus.daysApproved:       return Colors.teal;   // ← NOVÉ (viacdňová, čaká na výber platby)
       case WorkOrderStatus.hoursApproved:      return Colors.teal;   // ← NOVÉ
       case WorkOrderStatus.reworkRequested:    return Colors.orange;
       case WorkOrderStatus.craftsmanInsisting: return Colors.red;
@@ -143,6 +144,7 @@ class _WorkOrderList extends StatelessWidget {
       case WorkOrderStatus.confirmed:          return 'Potvrdená';
       case WorkOrderStatus.inProgress:         return 'Prebieha';
       case WorkOrderStatus.hoursLogged:        return 'Hodiny zadané';
+      case WorkOrderStatus.daysApproved:       return 'Dni schválené'; // ← NOVÉ (viacdňová, čaká na výber platby)
       case WorkOrderStatus.hoursApproved:      return 'Hodiny schválené'; // ← NOVÉ
       case WorkOrderStatus.reworkRequested:    return 'Žiadosť o úpravu';
       case WorkOrderStatus.craftsmanInsisting: return 'Nezhoda';

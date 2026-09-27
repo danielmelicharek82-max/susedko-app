@@ -227,8 +227,13 @@ class _CraftsmenTab extends StatelessWidget {
         Expanded(
           child: geo.isLoading
               ? const Center(child: CircularProgressIndicator(color: _kPrimary))
-              : geo.nearbyCraftsmen.isEmpty
-                  ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              : Builder(builder: (context) {
+                  final myUid = FirebaseAuth.instance.currentUser?.uid;
+                  final visible = geo.nearbyCraftsmen
+                      .where((item) => item.craftsman.id != myUid)
+                      .toList();
+                  if (visible.isEmpty) {
+                    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
@@ -239,21 +244,23 @@ class _CraftsmenTab extends StatelessWidget {
                       Text('noCraftsmenFound'.tr(),
                           style: const TextStyle(fontWeight: FontWeight.bold,
                               fontSize: 16, color: Color(0xFF1E293B))),
-                    ]))
-                  : RefreshIndicator(
+                    ]));
+                  }
+                  return RefreshIndicator(
                       onRefresh: geo.refresh,
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                        itemCount: geo.nearbyCraftsmen.length,
+                        itemCount: visible.length,
                         itemBuilder: (ctx, i) {
-                          final item = geo.nearbyCraftsmen[i];
+                          final item = visible[i];
                           return _CraftsmanCard(
                             craftsman: item.craftsman,
                             distance: item.formattedDistance,
                             onTap: () => Navigator.push(ctx,
                                 MaterialPageRoute(builder: (_) =>
                                     CraftsmanDetailScreen(craftsman: item.craftsman))));
-                        }))),
+                        }));
+                })),
       ]);
     });
   }
