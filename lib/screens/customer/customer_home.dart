@@ -11,6 +11,7 @@ import 'customer_work_orders_screen.dart';
 import 'customer_profile_screen.dart';
 import 'broadcast_request_screen.dart';
 import 'customer_requests_screen.dart';
+import '../login_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kBg      = Color(0xFFF0F4FF);
@@ -24,7 +25,9 @@ class CustomerHomeScreen extends StatefulWidget {
   // 0 = Remeselníci, 1 = Mapa, 2 = Objednávky, 3 = Dopyty, 4 = Profil.
   static final ValueNotifier<int?> requestedIndex = ValueNotifier<int?>(null);
 
-  const CustomerHomeScreen({super.key});
+  final bool isGuest;
+
+  const CustomerHomeScreen({super.key, this.isGuest = false});
   @override
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
 }
@@ -33,12 +36,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _currentIndex = 0;
   bool _isCraftsmanInCustomerMode = false;
 
-  final List<Widget> _screens = [
+  late final List<Widget> _screens = [
     CustomerCraftsmenScreen(),
     CraftsmanMapScreen(),
-    CustomerWorkOrdersScreen(),
-    CustomerRequestsScreen(),
-    CustomerProfileScreen(),
+    widget.isGuest ? _GuestLoginPrompt() : CustomerWorkOrdersScreen(),
+    widget.isGuest ? _GuestLoginPrompt() : CustomerRequestsScreen(),
+    widget.isGuest ? _GuestLoginPrompt() : CustomerProfileScreen(),
   ];
 
   @override
@@ -176,6 +179,49 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               icon: const Icon(Icons.person_outline),
               selectedIcon: const Icon(Icons.person, color: _kPrimary),
               label: 'profile'.tr(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Zobrazí sa namiesto Objednávky/Dopyty/Profil záložky, keď je používateľ
+// v Guest mode (bez prihlásenia) — tieto sekcie vyžadujú prihláseného
+// používateľa (uid), takže mu tu ponúkneme rýchlu cestu k registrácii.
+class _GuestLoginPrompt extends StatelessWidget {
+  const _GuestLoginPrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 56, color: _kPrimary),
+            const SizedBox(height: 16),
+            Text('guestLoginPromptTitle'.tr(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('guestLoginPromptMsg'.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kPrimary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false),
+              child: Text('signInBtn'.tr()),
             ),
           ],
         ),

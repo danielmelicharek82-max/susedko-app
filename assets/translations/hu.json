@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "Biztosan véglegesen törölni szeretné fiókját? Ez a művelet nem vonható vissza, és minden adata elvész.",
   "deleteAccountReauthTitle": "Ismételt bejelentkezés szükséges",
   "deleteAccountReauthMsg": "Biztonsági okokból a fiók törlése előtt újra be kell jelentkeznie. Most kijelentkeztetjük — ismételt bejelentkezés után próbálja meg újra a fiók törlését."
+  "guestLoginPromptTitle": "Ehhez a szakaszhoz bejelentkezés szükséges",
+  "guestLoginPromptMsg": "A szakasz megtekintéséhez kérjük, jelentkezzen be, vagy hozzon létre fiókot."
 }

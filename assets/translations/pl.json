@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "Czy na pewno chcesz trwale usunąć swoje konto? Tej czynności nie można cofnąć, a wszystkie Twoje dane zostaną utracone.",
   "deleteAccountReauthTitle": "Wymagane ponowne logowanie",
   "deleteAccountReauthMsg": "Ze względów bezpieczeństwa musisz zalogować się ponownie przed usunięciem konta. Teraz zostaniesz wylogowany — po ponownym zalogowaniu spróbuj usunąć konto jeszcze raz."
+  "guestLoginPromptTitle": "Ta sekcja wymaga zalogowania",
+  "guestLoginPromptMsg": "Aby wyświetlić tę sekcję, zaloguj się lub załóż konto."
 }

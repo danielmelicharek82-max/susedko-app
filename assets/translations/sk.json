@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "Naozaj chcete natrvalo vymazať svoj účet? Táto akcia sa nedá vrátiť späť a všetky vaše dáta budú stratené.",
   "deleteAccountReauthTitle": "Potrebné opätovné prihlásenie",
   "deleteAccountReauthMsg": "Z bezpečnostných dôvodov sa musíte znova prihlásiť pred vymazaním účtu. Teraz vás odhlásime — po opätovnom prihlásení skúste vymazanie účtu znova."
+  "guestLoginPromptTitle": "Táto sekcia vyžaduje prihlásenie",
+  "guestLoginPromptMsg": "Pre zobrazenie tejto sekcie sa prosím prihláste alebo si vytvorte účet."
 }

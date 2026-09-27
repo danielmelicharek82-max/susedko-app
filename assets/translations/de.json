@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "Möchten Sie Ihr Konto wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden und alle Ihre Daten gehen verloren.",
   "deleteAccountReauthTitle": "Erneute Anmeldung erforderlich",
   "deleteAccountReauthMsg": "Aus Sicherheitsgründen müssen Sie sich erneut anmelden, bevor Sie Ihr Konto löschen können. Wir melden Sie jetzt ab — versuchen Sie nach der erneuten Anmeldung bitte noch einmal, Ihr Konto zu löschen."
+  "guestLoginPromptTitle": "Dieser Bereich erfordert eine Anmeldung",
+  "guestLoginPromptMsg": "Um diesen Bereich anzuzeigen, melden Sie sich bitte an oder erstellen Sie ein Konto."
 }

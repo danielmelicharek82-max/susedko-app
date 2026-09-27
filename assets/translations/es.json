@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "¿Seguro que deseas eliminar permanentemente tu cuenta? Esta acción no se puede deshacer y perderás todos tus datos.",
   "deleteAccountReauthTitle": "Es necesario volver a iniciar sesión",
   "deleteAccountReauthMsg": "Por motivos de seguridad, debes volver a iniciar sesión antes de eliminar tu cuenta. Ahora cerraremos tu sesión; después de volver a iniciar sesión, intenta eliminar la cuenta de nuevo."
+  "guestLoginPromptTitle": "Esta sección requiere iniciar sesión",
+  "guestLoginPromptMsg": "Inicia sesión o crea una cuenta para ver esta sección."
 }

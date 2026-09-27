@@ -1372,4 +1372,6 @@
   "deleteAccountConfirmMsg": "Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.",
   "deleteAccountReauthTitle": "Re-login required",
   "deleteAccountReauthMsg": "For security reasons, you need to log in again before deleting your account. We'll sign you out now — after logging back in, please try deleting your account again."
+  "guestLoginPromptTitle": "This section requires sign in",
+  "guestLoginPromptMsg": "Please sign in or create an account to view this section."
 }
