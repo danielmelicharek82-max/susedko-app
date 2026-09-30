@@ -1365,13 +1365,13 @@
   "aboutApp_contact_title": "Kontakt & podpora",
   "aboutApp_contact_website": "www.susedko.com",
   "aboutApp_version": "verze {version}",
-  "aboutApp_copyright": "© {year} Susedko"
+  "aboutApp_copyright": "© {year} Susedko",
   "signInWithApple": "Přihlásit se přes Apple",
   "continueAsGuest": "Pokračovat bez registrace",
   "deleteAccountTitle": "Smazat účet",
   "deleteAccountConfirmMsg": "Opravdu chcete natrvalo smazat svůj účet? Tuto akci nelze vrátit zpět a všechna vaše data budou ztracena.",
   "deleteAccountReauthTitle": "Nutné opětovné přihlášení",
-  "deleteAccountReauthMsg": "Z bezpečnostních důvodů se musíte znovu přihlásit před smazáním účtu. Nyní vás odhlásíme — po opětovném přihlášení zkuste smazání účtu znovu."
+  "deleteAccountReauthMsg": "Z bezpečnostních důvodů se musíte znovu přihlásit před smazáním účtu. Nyní vás odhlásíme — po opětovném přihlášení zkuste smazání účtu znovu.",
   "guestLoginPromptTitle": "Tato sekce vyžaduje přihlášení",
   "guestLoginPromptMsg": "Pro zobrazení této sekce se prosím přihlaste nebo si vytvořte účet."
 }

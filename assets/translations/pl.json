@@ -1365,13 +1365,13 @@
   "aboutApp_contact_title": "Kontakt i pomoc",
   "aboutApp_contact_website": "www.susedko.com",
   "aboutApp_version": "wersja {version}",
-  "aboutApp_copyright": "© {year} Susedko"
+  "aboutApp_copyright": "© {year} Susedko",
   "signInWithApple": "Zaloguj się przez Apple",
   "continueAsGuest": "Kontynuuj bez rejestracji",
   "deleteAccountTitle": "Usuń konto",
   "deleteAccountConfirmMsg": "Czy na pewno chcesz trwale usunąć swoje konto? Tej czynności nie można cofnąć, a wszystkie Twoje dane zostaną utracone.",
   "deleteAccountReauthTitle": "Wymagane ponowne logowanie",
-  "deleteAccountReauthMsg": "Ze względów bezpieczeństwa musisz zalogować się ponownie przed usunięciem konta. Teraz zostaniesz wylogowany — po ponownym zalogowaniu spróbuj usunąć konto jeszcze raz."
+  "deleteAccountReauthMsg": "Ze względów bezpieczeństwa musisz zalogować się ponownie przed usunięciem konta. Teraz zostaniesz wylogowany — po ponownym zalogowaniu spróbuj usunąć konto jeszcze raz.",
   "guestLoginPromptTitle": "Ta sekcja wymaga zalogowania",
   "guestLoginPromptMsg": "Aby wyświetlić tę sekcję, zaloguj się lub załóż konto."
 }

@@ -1365,13 +1365,13 @@
   "aboutApp_contact_title": "Kapcsolat és támogatás",
   "aboutApp_contact_website": "www.susedko.com",
   "aboutApp_version": "verzió: {version}",
-  "aboutApp_copyright": "© {year} Susedko"
+  "aboutApp_copyright": "© {year} Susedko",
   "signInWithApple": "Bejelentkezés Apple-lel",
   "continueAsGuest": "Folytatás regisztráció nélkül",
   "deleteAccountTitle": "Fiók törlése",
   "deleteAccountConfirmMsg": "Biztosan véglegesen törölni szeretné fiókját? Ez a művelet nem vonható vissza, és minden adata elvész.",
   "deleteAccountReauthTitle": "Ismételt bejelentkezés szükséges",
-  "deleteAccountReauthMsg": "Biztonsági okokból a fiók törlése előtt újra be kell jelentkeznie. Most kijelentkeztetjük — ismételt bejelentkezés után próbálja meg újra a fiók törlését."
+  "deleteAccountReauthMsg": "Biztonsági okokból a fiók törlése előtt újra be kell jelentkeznie. Most kijelentkeztetjük — ismételt bejelentkezés után próbálja meg újra a fiók törlését.",
   "guestLoginPromptTitle": "Ehhez a szakaszhoz bejelentkezés szükséges",
   "guestLoginPromptMsg": "A szakasz megtekintéséhez kérjük, jelentkezzen be, vagy hozzon létre fiókot."
 }
