@@ -172,6 +172,16 @@ const List<String> kAllProfessionKeys = [
   'prof_hrnciar',
   'prof_podkuvac_koni',
   'prof_veterinar_hospodarske',
+
+  // 📐 PROJEKTOVANIE A STAVEBNÉ SLUŽBY
+  'prof_projektant',
+  'prof_architekt',
+  'prof_statik',
+  'prof_geodet',
+  'prof_stavebny_dozor',
+  'prof_stavebny_inzinier',
+  'prof_energeticky_certifikator',
+  'prof_technik_poziarnej_ochrany',
 ];
 
 
@@ -338,6 +348,16 @@ const Map<String, IconData> kProfessionIcons = {
   'prof_hrnciar': Icons.circle_outlined,
   'prof_podkuvac_koni': Icons.pets_outlined,
   'prof_veterinar_hospodarske': Icons.pets_outlined,
+
+  // PROJEKTOVANIE A STAVEBNÉ SLUŽBY
+  'prof_projektant': Icons.architecture_outlined,
+  'prof_architekt': Icons.home_work_outlined,
+  'prof_statik': Icons.engineering_outlined,
+  'prof_geodet': Icons.map_outlined,
+  'prof_stavebny_dozor': Icons.supervisor_account_outlined,
+  'prof_stavebny_inzinier': Icons.precision_manufacturing_outlined,
+  'prof_energeticky_certifikator': Icons.energy_savings_leaf_outlined,
+  'prof_technik_poziarnej_ochrany': Icons.fire_extinguisher_outlined,
 };
 
 class CraftsmanRegisterForm extends StatefulWidget {

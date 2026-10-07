@@ -42,7 +42,6 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
   bool _settingLocation = false;
   bool _uploadingPhoto  = false;
   bool _editMode        = false;
-  bool _deletingAccount = false;
 
   final _nameController       = TextEditingController();
   final _bioController        = TextEditingController();
@@ -253,115 +252,6 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
     Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false);
-  }
-
-  // Apple App Store Guideline 5.1.1(v): appka umožňujúca vytvorenie účtu
-  // musí ponúkať aj jeho trvalé vymazanie priamo v appke.
-  Future<void> _deleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('deleteAccountTitle'.tr()),
-        content: Text('deleteAccountConfirmMsg'.tr()),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('cancel'.tr())),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: Text('deleteAccountTitle'.tr())),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    setState(() => _deletingAccount = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      final uid = user.uid;
-      final db  = FirebaseFirestore.instance;
-
-      // 1) Zmazanie profilových a súvisiacich dát. Tieto operácie sú
-      // idempotentné — ak by sa nižšie neskôr zopakovali (napr. po
-      // re-autentifikácii), zmazanie už neexistujúcich dokumentov jednoducho
-      // nič neurobí.
-      await db.collection('craftsmen').doc(uid).delete();
-      await db.collection('users').doc(uid).delete();
-
-      final bookings = await db.collection('bookings')
-          .where('craftsmanId', isEqualTo: uid).get();
-      for (final doc in bookings.docs) {
-        await doc.reference.delete();
-      }
-
-      final reviews = await db.collection('reviews')
-          .where('craftsmanId', isEqualTo: uid).get();
-      for (final doc in reviews.docs) {
-        await doc.reference.delete();
-      }
-
-      final workOrders = await db.collection('workOrders')
-          .where('craftsmanId', isEqualTo: uid).get();
-      for (final doc in workOrders.docs) {
-        await doc.reference.delete();
-      }
-
-      try {
-        await FirebaseStorage.instance
-            .ref().child('craftsmen/$uid/profile.jpg').delete();
-      } catch (_) {}
-
-      try {
-        final portfolioRef =
-            FirebaseStorage.instance.ref().child('craftsmen/$uid/portfolio');
-        final portfolioList = await portfolioRef.listAll();
-        for (final item in portfolioList.items) {
-          await item.delete();
-        }
-      } catch (_) {}
-
-      // 2) Zmazanie samotného Firebase Auth účtu — musí byť POSLEDNÉ, lebo
-      // Firestore pravidlá vyššie sa spoliehajú na request.auth.uid, ktorý
-      // po zmazaní Auth účtu prestane existovať.
-      await user.delete();
-
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (route) => false);
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _deletingAccount = false);
-      if (e.code == 'requires-recent-login') {
-        // Dáta boli už zmazané vyššie (mazanie je idempotentné); zostáva
-        // len Auth účet. Odhlásime používateľa a po opätovnom prihlásení
-        // druhé stlačenie "Vymazať účet" operáciu bezpečne dokončí.
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('deleteAccountReauthTitle'.tr()),
-            content: Text('deleteAccountReauthMsg'.tr()),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('ok'.tr())),
-            ],
-          ),
-        );
-        await _logout();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${'error'.tr()}: ${e.message}'),
-            backgroundColor: Colors.red));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _deletingAccount = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
-    }
   }
 
   // ── BUILD ──────────────────────────────────────────────────────────────────
@@ -803,23 +693,6 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12))),
             onPressed: _logout)),
-          const SizedBox(height: 10),
-
-          SizedBox(width: double.infinity, child: OutlinedButton.icon(
-            icon: _deletingAccount
-                ? const SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(
-                        color: Colors.red, strokeWidth: 2))
-                : const Icon(Icons.delete_forever),
-            label: Text('deleteAccountTitle'.tr()),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              backgroundColor: Colors.red.withOpacity(0.05),
-              side: const BorderSide(color: Colors.red),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12))),
-            onPressed: _deletingAccount ? null : _deleteAccount)),
           const SizedBox(height: 24),
         ])));
   }
@@ -963,23 +836,6 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12))),
           onPressed: _logout),
-        const SizedBox(height: 10),
-
-        OutlinedButton.icon(
-          icon: _deletingAccount
-              ? const SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(
-                      color: Colors.red, strokeWidth: 2))
-              : const Icon(Icons.delete_forever),
-          label: Text('deleteAccountTitle'.tr()),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.red,
-            backgroundColor: Colors.red.withOpacity(0.05),
-            side: const BorderSide(color: Colors.red),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12))),
-          onPressed: _deletingAccount ? null : _deleteAccount),
         const SizedBox(height: 24),
       ])));
 

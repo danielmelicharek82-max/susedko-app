@@ -70,12 +70,32 @@ class ReviewProvider extends ChangeNotifier {
         bookingId: bookingId,
       );
 
-      await docRef.set(review.toMap());
-      await _updateCraftsmanRating(craftsmanId, rating);
-      await _firestore
-          .collection('bookings')
-          .doc(bookingId)
-          .update({'isReviewed': true});
+      // Dočasne rozdelené do samostatných try/catch blokov, aby presne
+      // vedeli, ktorý z troch zápisov padá — raz to overíme, dá sa to
+      // vrátiť naspäť do jedného bloku.
+      try {
+        await docRef.set(review.toMap());
+      } catch (e) {
+        throw Exception('KROK 1 (vytvorenie recenzie) zlyhal: $e');
+      }
+
+      try {
+        await _updateCraftsmanRating(craftsmanId, rating);
+      } catch (e) {
+        throw Exception('KROK 2 (update ratingu remeselníka) zlyhal: $e');
+      }
+
+      try {
+        // "bookings" ako samostatná kolekcia v produkcii neexistuje —
+        // reálne zákazky žijú vo "work_orders" a bookingId je v skutočnosti
+        // ID tohto work_order dokumentu.
+        await _firestore
+            .collection('work_orders')
+            .doc(bookingId)
+            .update({'isReviewed': true});
+      } catch (e) {
+        throw Exception('KROK 3 (update work_orders) zlyhal: $e');
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -92,8 +112,11 @@ class ReviewProvider extends ChangeNotifier {
     final ref = _firestore.collection('craftsmen').doc(craftsmanId);
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(ref);
-      final currentCount = (snapshot.data()?['reviewCount'] ?? 0) as int;
-      final currentAvg = (snapshot.data()?['rating'] ?? 0.0) as double;
+      // Firestore vracia čísla ako int, keď sú bez desatinnej časti (napr.
+      // uložené 0 namiesto 0.0) — priamy "as int"/"as double" cast na takej
+      // hodnote spadne. "as num" + .toInt()/.toDouble() zvládne oba tvary.
+      final currentCount = ((snapshot.data()?['reviewCount'] ?? 0) as num).toInt();
+      final currentAvg = ((snapshot.data()?['rating'] ?? 0.0) as num).toDouble();
       final newCount = currentCount + 1;
       final newAvg = ((currentAvg * currentCount) + newRating) / newCount;
       transaction.update(ref, {
