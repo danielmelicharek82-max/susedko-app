@@ -46,6 +46,8 @@ class _BroadcastRequestScreenState
   late List<String> _selectedProfessions;
   late String _selectedCategory;
   String _selectedTimeframe = '1_3_months';
+  bool _quoteRequired = false;
+  DateTime? _quoteDeadline;
 
   final List<File>   _newPhotos    = [];
   final List<String> _existingUrls = [];
@@ -75,6 +77,8 @@ class _BroadcastRequestScreenState
               ? r.category
               : kProfessionCategories[_primaryProfession]!.first;
       _selectedTimeframe      = r.timeframe;
+      _quoteRequired          = r.quoteRequired;
+      _quoteDeadline          = r.quoteDeadline;
       _descController.text    = r.description;
       _budgetController.text  = r.budget?.toStringAsFixed(0) ?? '';
       _addressController.text = r.address ?? '';
@@ -92,6 +96,21 @@ class _BroadcastRequestScreenState
     _budgetController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickQuoteDeadline() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initial = (_quoteDeadline != null && !_quoteDeadline!.isBefore(today))
+        ? _quoteDeadline!
+        : today.add(const Duration(days: 7));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 90)),
+    );
+    if (picked != null) setState(() => _quoteDeadline = picked);
   }
 
   void _toggleProfession(String p) {
@@ -215,6 +234,8 @@ class _BroadcastRequestScreenState
           budget:      double.tryParse(_budgetController.text.trim()),
           photoUrls:   allPhotoUrls,
           timeframe:   _selectedTimeframe,
+          quoteRequired: _quoteRequired,
+          quoteDeadline: _quoteRequired ? _quoteDeadline : null,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -237,6 +258,8 @@ class _BroadcastRequestScreenState
           budget:        double.tryParse(_budgetController.text.trim()),
           photoUrls:     allPhotoUrls,
           timeframe:     _selectedTimeframe,
+          quoteRequired: _quoteRequired,
+          quoteDeadline: _quoteRequired ? _quoteDeadline : null,
           status:        ServiceRequestStatus.open,
           type:          ServiceRequestType.broadcast,
           createdAt:     DateTime.now(),
@@ -523,6 +546,79 @@ class _BroadcastRequestScreenState
                   }
                   return null;
                 }),
+              const SizedBox(height: 20),
+
+              // ── Cenové ponuky ──────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: _quoteRequired
+                          ? _kPrimary.withOpacity(0.4)
+                          : Colors.grey.shade200),
+                  boxShadow: [BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8)]),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: _kPrimary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.request_quote_outlined,
+                          size: 15, color: _kPrimary)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('quote_request_title'.tr(),
+                        style: const TextStyle(fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B)))),
+                    Switch(
+                      value: _quoteRequired,
+                      activeColor: _kPrimary,
+                      onChanged: (v) => setState(() => _quoteRequired = v)),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text('quote_request_desc'.tr(),
+                      style: TextStyle(fontSize: 12,
+                          color: Colors.grey.shade500, height: 1.4)),
+                  if (_quoteRequired) ...[
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickQuoteDeadline,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 11),
+                            decoration: BoxDecoration(
+                              color: _kBg,
+                              borderRadius: BorderRadius.circular(12)),
+                            child: Row(children: [
+                              const Icon(Icons.event_outlined,
+                                  size: 16, color: _kPrimary),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(
+                                _quoteDeadline == null
+                                    ? 'quote_deadline_none'.tr()
+                                    : '${'quote_deadline'.tr()}: ${_quoteDeadline!.day}.${_quoteDeadline!.month}.${_quoteDeadline!.year}',
+                                style: const TextStyle(fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E293B)))),
+                            ])))),
+                      if (_quoteDeadline != null)
+                        IconButton(
+                          tooltip: 'quote_deadline_clear'.tr(),
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () =>
+                              setState(() => _quoteDeadline = null)),
+                    ]),
+                  ],
+                ])),
               const SizedBox(height: 20),
 
               // ── Timeframe ──────────────────────────────────────────

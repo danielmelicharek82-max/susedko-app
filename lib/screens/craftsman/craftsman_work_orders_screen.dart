@@ -5,9 +5,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/work_order.dart';
 import '../../services/work_order_service.dart';
 import '../chat_screen.dart';
+import '../auth/billing_profile_screen.dart';
 
 
 // ── Helper: čistá sadzba remeselníka (bez 10% poplatku platformy) ──────────
@@ -15,6 +17,7 @@ extension WorkOrderNetExtension on WorkOrder {
   double? get netHourlyRate =>
       hourlyRate != null ? hourlyRate! / 1.1 : null;
   double? get netTotal =>
+      isFixed ? craftsmanFixedNet :
       loggedHours != null && netHourlyRate != null
           ? double.parse((loggedHours! * netHourlyRate!).toStringAsFixed(2))
           : null;
@@ -147,11 +150,13 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             }
             final all = snap.data ?? [];
 
+            // Zrušené zákazky so zálohou čakajúcou na rozhodnutie remeselníka
+            // ostávajú medzi aktívnymi, aby ich nikto neprehliadol.
             final active = all.where((o) => [
               WorkOrderStatus.pending,
               WorkOrderStatus.confirmed,
               WorkOrderStatus.inProgress,
-            ].contains(o.status)).toList();
+            ].contains(o.status) || (o.status == WorkOrderStatus.cancelled && o.depositNeedsDecision)).toList();
 
             final hours = all.where((o) => [
               WorkOrderStatus.hoursLogged,
@@ -167,7 +172,7 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
               WorkOrderStatus.paid,
               WorkOrderStatus.completed,
               WorkOrderStatus.cancelled,
-            ].contains(o.status)).toList();
+            ].contains(o.status) && !(o.status == WorkOrderStatus.cancelled && o.depositNeedsDecision)).toList();
 
             return TabBarView(controller: _tabController, children: [
               _buildList(active, tab: 'active'),
@@ -357,8 +362,12 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
               _row(Icons.location_on_outlined, o.address!),
             ],
             const SizedBox(height: 4),
-            _row(Icons.timer_outlined,
-                'workOrders_estimated_hours'.tr(namedArgs: {'hours': o.estimatedHours.toString()})),
+            if (!o.isFixed)
+              _row(Icons.timer_outlined,
+                  'workOrders_estimated_hours'.tr(namedArgs: {'hours': o.estimatedHours.toString()})),
+            if (o.isFixed) _fixedPriceBox(o),
+            if (o.isFixed && o.contacts != null && o.status != WorkOrderStatus.cancelled)
+              _contactBox(o),
 
             // Hodiny box
             if (o.loggedHours != null) ...[
@@ -423,7 +432,14 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
               icon: Icons.check_rounded,
               color: _kPrimary,
               fullWidth: true,
-              onTap: () => WorkOrderService.confirm(o.id)),
+              onTap: () async {
+                // Zákazku možno prijať až s kompletnými fakturačnými údajmi
+                // (samofakturácia vyžaduje IČO, DIČ, IBAN a súhlas).
+                if (await BillingProfileScreen.ensureReady(
+                    context, 'craftsman')) {
+                  await WorkOrderService.confirm(o.id);
+                }
+              }),
             const SizedBox(height: 8),
             _outlineBtn(
               label: 'workOrders_pending_reject'.tr(),
@@ -434,6 +450,21 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
         ]);
 
       case WorkOrderStatus.confirmed:
+        if (o.isFixed && o.depositDue) {
+          return Column(children: [
+            _statusBox(
+              icon: Icons.hourglass_top_rounded,
+              color: Colors.orange,
+              title: 'order_wait_deposit_title'.tr(),
+              text: 'order_wait_deposit_desc'.tr(namedArgs: {
+                'deposit': o.depositGross.toStringAsFixed(2)}),
+              showSupport: false),
+            const SizedBox(height: 8),
+            _outlineBtn(
+              label: 'order_cancel_btn'.tr(), color: Colors.red,
+              fullWidth: true, onTap: () => _cancelFixed(o)),
+          ]);
+        }
         return Column(children: [
           _infoBanner(
             icon: Icons.handyman_outlined,
@@ -447,9 +478,16 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             color: Colors.purple,
             onTap: () => WorkOrderService.startWork(o.id),
             fullWidth: true),
+          if (o.isFixed) ...[
+            const SizedBox(height: 8),
+            _outlineBtn(
+              label: 'order_cancel_btn'.tr(), color: Colors.red,
+              fullWidth: true, onTap: () => _cancelFixed(o)),
+          ],
         ]);
 
       case WorkOrderStatus.inProgress:
+        if (o.isFixed) return _fixedInProgress(o);
         if (o.isMultiDay) return _buildDailyLogsSection(o);
         return Column(children: [
           _infoBanner(
@@ -467,6 +505,14 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
         ]);
 
       case WorkOrderStatus.hoursLogged:
+        if (o.isFixed) {
+          return _statusBox(
+            icon: Icons.hourglass_top_rounded,
+            color: Colors.orange,
+            title: 'order_done_sent_title'.tr(),
+            text: 'order_done_sent_desc'.tr(),
+            showSupport: false);
+        }
         return _statusBox(
           icon: Icons.hourglass_top_rounded,
           color: Colors.orange,
@@ -549,11 +595,14 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
           const SizedBox(height: 10),
           Column(children: [
             _primaryBtn(
-              label: 'workOrders_rework_btn'.tr(),
+              label: o.isFixed
+                  ? 'order_done_btn'.tr() : 'workOrders_rework_btn'.tr(),
               icon: Icons.edit_rounded,
               color: _kPrimary,
               fullWidth: true,
-              onTap: () => _showLogHoursDialog(o, isRework: true)),
+              onTap: () => o.isFixed
+                  ? _confirmComplete(o)
+                  : _showLogHoursDialog(o, isRework: true)),
             const SizedBox(height: 8),
             _outlineBtn(
               label: 'workOrders_insist_btn'.tr(),
@@ -627,9 +676,214 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             ])),
           ]));
 
+      case WorkOrderStatus.cancelled:
+        return _cancelledDepositBox(o);
+
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  // ── Pevná cena: box s cenou, zálohou a odmenou ─────────────────────────────
+  Widget _fixedPriceBox(WorkOrder o) {
+    final depStatus = switch (o.depositStatus) {
+      'due'  => 'order_deposit_due'.tr(),
+      'paid' => 'order_deposit_paid'.tr(),
+      'refunded' => 'order_deposit_refunded'.tr(),
+      'kept' => 'order_deposit_kept'.tr(),
+      'refund_pending_decision' => 'order_deposit_decide'.tr(),
+      _ => null,
+    };
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _kPrimary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kPrimary.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.lock_outline_rounded, size: 16, color: _kPrimary),
+          const SizedBox(width: 6),
+          Text('order_fixed_price'.tr(), style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 12, color: _kPrimary)),
+        ]),
+        const SizedBox(height: 8),
+        Text('order_your_reward'.tr(namedArgs: {
+              'total': (o.craftsmanFixedNet ?? 0).toStringAsFixed(2)}),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15,
+                color: Color(0xFF1E293B))),
+        if ((o.craftsmanFixedMaterial ?? 0) > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('order_labor_material'.tr(namedArgs: {
+                  'labor': (o.craftsmanFixedLabor ?? 0).toStringAsFixed(2),
+                  'material': (o.craftsmanFixedMaterial ?? 0).toStringAsFixed(2)}),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
+        if (depStatus != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              Icon(Icons.savings_outlined, size: 14, color: Colors.grey.shade600),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                  '${'order_deposit'.tr()}: ${o.depositGross.toStringAsFixed(2)} € — $depStatus',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
+            ])),
+      ]));
+  }
+
+  // ── Kontakt na zákazníka (zapisuje server po prijatí zákazky) ──────────────
+  Widget _contactBox(WorkOrder o) {
+    final c = o.contactOf(true);
+    final phone = (c?['phone'] as String?)?.trim();
+    final email = (c?['email'] as String?)?.trim();
+    if ((phone == null || phone.isEmpty) && (email == null || email.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    Future<void> open(Uri u) async {
+      if (!await launchUrl(u)) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('error'.tr())));
+      }
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.25))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('order_contact_title'.tr(), style: TextStyle(
+            fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green.shade800)),
+        const SizedBox(height: 4),
+        Text('order_contact_hint_craftsman'.tr(),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          if (phone != null && phone.isNotEmpty)
+            ActionChip(
+              avatar: const Icon(Icons.phone_outlined, size: 16),
+              label: Text(phone),
+              onPressed: () => open(Uri(scheme: 'tel', path: phone))),
+          if (email != null && email.isNotEmpty)
+            ActionChip(
+              avatar: const Icon(Icons.mail_outline, size: 16),
+              label: Text(email),
+              onPressed: () => open(Uri(scheme: 'mailto', path: email))),
+        ]),
+      ]));
+  }
+
+  // ── Pevná cena: práca prebieha → "Práca dokončená" ─────────────────────────
+  Widget _fixedInProgress(WorkOrder o) => Column(children: [
+        _infoBanner(
+          icon: Icons.construction_outlined,
+          color: Colors.green,
+          title: 'workOrders_in_progress_title'.tr(),
+          text: 'order_in_progress_desc'.tr()),
+        const SizedBox(height: 12),
+        _primaryBtn(
+          label: 'order_done_btn'.tr(),
+          icon: Icons.task_alt_rounded,
+          color: Colors.green,
+          onTap: () => _confirmComplete(o),
+          fullWidth: true),
+      ]);
+
+  Future<void> _cancelFixed(WorkOrder o) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('order_cancel_title'.tr()),
+        content: Text(o.depositPaid
+            ? 'order_cancel_craftsman_paid_desc'.tr()
+            : 'order_cancel_desc'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('order_cancel_confirm'.tr(),
+                  style: const TextStyle(color: Colors.red))),
+        ]));
+    if (ok != true) return;
+    try {
+      await WorkOrderService.cancel(o.id);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _confirmComplete(WorkOrder o) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('order_done_confirm_title'.tr()),
+        content: Text('order_done_confirm_desc'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('confirm'.tr())),
+        ]));
+    if (ok != true) return;
+    try {
+      await WorkOrderService.completeFixed(o.id);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  // ── Zrušená zákazka: záloha ────────────────────────────────────────────────
+  Widget _cancelledDepositBox(WorkOrder o) {
+    if (!o.isFixed) return const SizedBox.shrink();
+    if (o.depositNeedsDecision) {
+      Future<void> decide(bool refund) async {
+        try {
+          await WorkOrderService.decideDepositRefund(o.id, refund: refund);
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+        }
+      }
+      return Column(children: [
+        _infoBanner(
+          icon: Icons.savings_outlined,
+          color: Colors.orange,
+          title: 'order_deposit_decide_title'.tr(),
+          text: 'order_deposit_decide_desc'.tr(namedArgs: {
+            'deposit': o.depositGross.toStringAsFixed(2)})),
+        const SizedBox(height: 10),
+        _primaryBtn(
+          label: 'order_deposit_refund_btn'.tr(),
+          icon: Icons.undo_rounded,
+          color: _kPrimary,
+          fullWidth: true,
+          onTap: () => decide(true)),
+        const SizedBox(height: 8),
+        _outlineBtn(
+          label: 'order_deposit_keep_btn'.tr(),
+          color: Colors.red,
+          fullWidth: true,
+          onTap: () => decide(false)),
+      ]);
+    }
+    final text = switch (o.depositStatus) {
+      'refunded' => 'order_deposit_refunded_info'.tr(),
+      'kept' => 'order_deposit_kept_info'.tr(),
+      'refund_failed' => 'order_deposit_failed_info'.tr(),
+      _ => null,
+    };
+    if (text == null) return const SizedBox.shrink();
+    return _statusBox(
+      icon: Icons.savings_outlined,
+      color: Colors.grey,
+      title: 'order_deposit'.tr(),
+      text: text,
+      showSupport: o.depositStatus == 'refund_failed');
   }
 
   // ── Info banner ────────────────────────────────────────────────────────────
@@ -876,6 +1130,8 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
   // ── Dialog: zadaj hodiny za jeden deň (viacdňová zákazka) ──────────────────
   Future<void> _showLogDailyHoursDialog(WorkOrder o, DateTime day,
       {bool isRework = false}) async {
+    if (!await BillingProfileScreen.ensureReady(context, 'craftsman')) return;
+    if (!mounted) return;
     final key = WorkOrderService.dateKeyFor(day);
     final existing = o.dailyLogs[key];
     // Denný strop je pevné, rozumné číslo (16h) — netreba ho škálovať
@@ -1134,6 +1390,8 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
   // ── Dialog: zadaj hodiny ───────────────────────────────────────────────────
   Future<void> _showLogHoursDialog(WorkOrder o,
       {bool isRework = false}) async {
+    if (!await BillingProfileScreen.ensureReady(context, 'craftsman')) return;
+    if (!mounted) return;
     double hours = o.loggedHours ?? o.estimatedHours.toDouble();
     final noteController = TextEditingController(
         text: isRework ? o.craftsmanNote ?? '' : '');

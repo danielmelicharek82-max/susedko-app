@@ -26,6 +26,7 @@ class WeeklyInvoice {
   final double totalHours;
   final double totalAmount;         // suma ktorú zákazník zaplatí (s poplatkom)
   final double craftsmanAmount;     // suma ktorú dostane remeselník (bez 10%)
+  final double vatAmount;           // DPH k [totalAmount] (0 pre faktúry bez DPH)
 
   final InvoicePeriod period;
   final DateTime periodStart;
@@ -48,6 +49,7 @@ class WeeklyInvoice {
     required this.totalHours,
     required this.totalAmount,
     required this.craftsmanAmount,
+    this.vatAmount = 0,
     required this.period,
     required this.periodStart,
     required this.periodEnd,
@@ -57,6 +59,11 @@ class WeeklyInvoice {
     required this.createdAt,
     this.paidAt,
   });
+
+  /// Suma, ktorú zákazník reálne zaplatí (základ + DPH). Pri faktúrach bez
+  /// DPH sa rovná [totalAmount].
+  double get totalWithVat =>
+      double.parse((totalAmount + vatAmount).toStringAsFixed(2));
 
   bool get isOverdue =>
       status == WeeklyInvoiceStatus.pending &&
@@ -77,6 +84,7 @@ class WeeklyInvoice {
     'totalHours':       totalHours,
     'totalAmount':      totalAmount,
     'craftsmanAmount':  craftsmanAmount,
+    'vatAmount':        vatAmount,
     'period':           period.name,
     'periodStart':      Timestamp.fromDate(periodStart),
     'periodEnd':        Timestamp.fromDate(periodEnd),
@@ -101,6 +109,7 @@ class WeeklyInvoice {
       totalHours:   (map['totalHours'] as num?)?.toDouble() ?? 0,
       totalAmount:  (map['totalAmount'] as num?)?.toDouble() ?? 0,
       craftsmanAmount: (map['craftsmanAmount'] as num?)?.toDouble() ?? 0,
+      vatAmount:    (map['vatAmount'] as num?)?.toDouble() ?? 0,
       period: InvoicePeriod.values.firstWhere(
           (e) => e.name == map['period'],
           orElse: () => InvoicePeriod.weekly),
@@ -124,6 +133,7 @@ class WeeklyInvoice {
     double? totalHours,
     double? totalAmount,
     double? craftsmanAmount,
+    double? vatAmount,
     DateTime? paidAt,
   }) => WeeklyInvoice(
     id: id, customerId: customerId, craftsmanId: craftsmanId,
@@ -132,6 +142,7 @@ class WeeklyInvoice {
     totalHours:      totalHours      ?? this.totalHours,
     totalAmount:     totalAmount     ?? this.totalAmount,
     craftsmanAmount: craftsmanAmount ?? this.craftsmanAmount,
+    vatAmount:       vatAmount       ?? this.vatAmount,
     period: period, periodStart: periodStart,
     periodEnd: periodEnd, dueDate: dueDate,
     status:          status          ?? this.status,

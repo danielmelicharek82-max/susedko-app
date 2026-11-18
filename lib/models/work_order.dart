@@ -156,6 +156,11 @@ class WorkOrder {
   final double? loggedHours;
   final double? hourlyRate;
   final double? totalAmount;
+
+  /// Sadzba DPH (v %) uplatnená na túto zákazku. Nastavuje ju SERVER pri
+  /// vytvorení zákazky. Staršie zákazky ju nemajú (0) — ich sumy ostávajú
+  /// bez DPH, ako doteraz.
+  final double vatPercent;
   final String? craftsmanNote;
   final String? disputeNote;
   final String? reworkNote;
@@ -180,6 +185,25 @@ class WorkOrder {
   // hourlyRate/totalAmount/status priamo na objednávke, bezo zmeny.
   final Map<String, DailyLog> dailyLogs;
 
+  // ── Zákazka s PEVNOU CENOU (z cenovej ponuky) ─────────────────────────
+  // pricingMode == 'fixed': cenu určuje ponuka, nie hodiny. totalAmount je
+  // netto cena pre zákazníka (práca + materiál s prirážkou). Všetko
+  // nastavuje SERVER pri vytvorení; klient tieto polia nemení.
+  final String pricingMode;            // 'hourly' | 'fixed'
+  final double? fixedLaborNet;         // práca pre zákazníka, netto
+  final double? fixedMaterialNet;      // materiál pre zákazníka, netto
+  final String? fixedMaterialNote;
+  final String? fixedDuration;
+  final double? craftsmanFixedNet;     // odmena remeselníka (bez prirážky), netto
+  final double? craftsmanFixedLabor;
+  final double? craftsmanFixedMaterial;
+  final double depositGross;           // záloha na materiál s DPH
+  // none | due | paid | refunded | refund_pending_decision | kept | refund_failed
+  final String depositStatus;
+  final DateTime? depositPaidAt;
+  // Kontakty druhej strany (server ich zapíše po prijatí zákazky)
+  final Map<String, dynamic>? contacts;
+
   WorkOrder({
     required this.id,
     required this.customerId,
@@ -199,6 +223,7 @@ class WorkOrder {
     this.loggedHours,
     this.hourlyRate,
     this.totalAmount,
+    this.vatPercent = 0,
     this.craftsmanNote,
     this.disputeNote,
     this.reworkNote,
@@ -213,7 +238,43 @@ class WorkOrder {
     this.completedAt,
     this.hoursApprovedAt,
     this.dailyLogs = const {},
+    this.pricingMode = 'hourly',
+    this.fixedLaborNet,
+    this.fixedMaterialNet,
+    this.fixedMaterialNote,
+    this.fixedDuration,
+    this.craftsmanFixedNet,
+    this.craftsmanFixedLabor,
+    this.craftsmanFixedMaterial,
+    this.depositGross = 0,
+    this.depositStatus = 'none',
+    this.depositPaidAt,
+    this.contacts,
   });
+
+  // ── Pevná cena ──────────────────────────────────────────────────────────
+  bool get isFixed => pricingMode == 'fixed';
+  bool get depositDue => isFixed && depositStatus == 'due';
+  bool get depositPaid => isFixed && depositStatus == 'paid';
+  /// Záloha je buď zaplatená, alebo sa neúčtuje — práca sa môže začať.
+  bool get depositSettled => !isFixed || depositStatus != 'due';
+  bool get depositNeedsDecision => depositStatus == 'refund_pending_decision';
+
+  /// Doplatok (s DPH) = celkom − zaplatená záloha.
+  double? get balanceGross {
+    final total = totalWithVat;
+    if (total == null) return null;
+    final paid = depositStatus == 'paid' ? depositGross : 0;
+    return ((total - paid) * 100).roundToDouble() / 100;
+  }
+
+  /// Kontakt druhej strany (telefón/e-mail) — dostupný po prijatí zákazky.
+  Map<String, dynamic>? contactOf(bool forCustomer) {
+    final c = contacts;
+    if (c == null) return null;
+    final m = c[forCustomer ? 'customer' : 'craftsman'];
+    return m is Map ? Map<String, dynamic>.from(m) : null;
+  }
 
   double? get calculatedTotal {
     if (totalAmount != null) return totalAmount;
@@ -221,6 +282,20 @@ class WorkOrder {
       return loggedHours! * hourlyRate!;
     }
     return null;
+  }
+
+  /// DPH z [calculatedTotal] (základ bez DPH), zaokrúhlené na centy.
+  double get vatAmount {
+    final net = calculatedTotal ?? 0;
+    return (net * vatPercent).roundToDouble() / 100;
+  }
+
+  /// Suma, ktorú zákazník reálne zaplatí (základ + DPH).
+  /// Pri zákazkách bez DPH (vatPercent == 0) sa rovná [calculatedTotal].
+  double? get totalWithVat {
+    final net = calculatedTotal;
+    if (net == null) return null;
+    return ((net + vatAmount) * 100).roundToDouble() / 100;
   }
 
   bool get isPaid => paymentStatus == WorkOrderPaymentStatus.paid;
@@ -301,6 +376,7 @@ class WorkOrder {
     'loggedHours':         loggedHours,
     'hourlyRate':          hourlyRate,
     'totalAmount':         totalAmount,
+    'vatPercent':          vatPercent,
     'craftsmanNote':       craftsmanNote,
     'disputeNote':         disputeNote,
     'reworkNote':          reworkNote,
@@ -317,6 +393,8 @@ class WorkOrder {
     'hoursApprovedAt':     hoursApprovedAt != null
         ? Timestamp.fromDate(hoursApprovedAt!) : null,
     'dailyLogs':           dailyLogs.map((k, v) => MapEntry(k, v.toMap())),
+    // Polia pevnej ceny sa do Firestore z klienta NEZAPISUJÚ (vytvára ich
+    // server cez createWorkOrder), preto tu zámerne nie sú.
   };
 
   factory WorkOrder.fromFirestore(DocumentSnapshot doc) {
@@ -344,6 +422,7 @@ class WorkOrder {
           ? (map['loggedHours'] as num).toDouble() : null,
       hourlyRate:    map['hourlyRate'] != null
           ? (map['hourlyRate'] as num).toDouble() : null,
+      vatPercent:    (map['vatPercent'] as num?)?.toDouble() ?? 0,
       totalAmount:   map['totalAmount'] != null
           ? (map['totalAmount'] as num).toDouble() : null,
       craftsmanNote:       map['craftsmanNote'],
@@ -373,6 +452,20 @@ class WorkOrder {
           ? Map<String, dynamic>.from(map['dailyLogs']).map((k, v) =>
               MapEntry(k, DailyLog.fromMap(Map<String, dynamic>.from(v))))
           : const {},
+      pricingMode:       (map['pricingMode'] as String?) ?? 'hourly',
+      fixedLaborNet:     (map['fixedLaborNet'] as num?)?.toDouble(),
+      fixedMaterialNet:  (map['fixedMaterialNet'] as num?)?.toDouble(),
+      fixedMaterialNote: map['fixedMaterialNote'] as String?,
+      fixedDuration:     map['fixedDuration'] as String?,
+      craftsmanFixedNet:      (map['craftsmanFixedNet'] as num?)?.toDouble(),
+      craftsmanFixedLabor:    (map['craftsmanFixedLabor'] as num?)?.toDouble(),
+      craftsmanFixedMaterial: (map['craftsmanFixedMaterial'] as num?)?.toDouble(),
+      depositGross:  (map['depositGross'] as num?)?.toDouble() ?? 0,
+      depositStatus: (map['depositStatus'] as String?) ?? 'none',
+      depositPaidAt: map['depositPaidAt'] is Timestamp
+          ? (map['depositPaidAt'] as Timestamp).toDate() : null,
+      contacts: map['contacts'] is Map
+          ? Map<String, dynamic>.from(map['contacts']) : null,
     );
   }
 
@@ -384,6 +477,7 @@ class WorkOrder {
     double? loggedHours,
     double? hourlyRate,
     double? totalAmount,
+    double? vatPercent,
     String? craftsmanNote,
     String? disputeNote,
     String? reworkNote,
@@ -407,6 +501,7 @@ class WorkOrder {
       loggedHours:         loggedHours         ?? this.loggedHours,
       hourlyRate:          hourlyRate           ?? this.hourlyRate,
       totalAmount:         totalAmount          ?? this.totalAmount,
+      vatPercent:          vatPercent           ?? this.vatPercent,
       craftsmanNote:       craftsmanNote        ?? this.craftsmanNote,
       disputeNote:         disputeNote          ?? this.disputeNote,
       reworkNote:          reworkNote           ?? this.reworkNote,
@@ -421,6 +516,13 @@ class WorkOrder {
       completedAt:         completedAt          ?? this.completedAt,
       hoursApprovedAt:     hoursApprovedAt      ?? this.hoursApprovedAt,
       dailyLogs:           dailyLogs            ?? this.dailyLogs,
+      pricingMode: pricingMode, fixedLaborNet: fixedLaborNet,
+      fixedMaterialNet: fixedMaterialNet, fixedMaterialNote: fixedMaterialNote,
+      fixedDuration: fixedDuration, craftsmanFixedNet: craftsmanFixedNet,
+      craftsmanFixedLabor: craftsmanFixedLabor,
+      craftsmanFixedMaterial: craftsmanFixedMaterial,
+      depositGross: depositGross, depositStatus: depositStatus,
+      depositPaidAt: depositPaidAt, contacts: contacts,
     );
   }
 }

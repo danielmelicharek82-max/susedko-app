@@ -12,6 +12,7 @@ import 'dart:io';
 import '../../models/craftsman.dart';
 import '../../services/geo_service.dart';
 import '../auth/craftsman_register_form.dart';
+import '../auth/billing_profile_screen.dart';
 import '../login_screen.dart';
 import 'about_craftsman_app_screen.dart';
 import '../../services/chat_service.dart';
@@ -652,6 +653,10 @@ class _CraftsmanProfileScreenState extends State<CraftsmanProfileScreen> {
           _gradientBtn(label: 'editProfile'.tr(),
               icon: Icons.edit_outlined,
               onTap: () => setState(() => _editMode = true)),
+          const SizedBox(height: 10),
+
+          // ── Fakturačné údaje ──────────────────────────────────────────
+          const BillingProfileTile(role: 'craftsman'),
           const SizedBox(height: 10),
 
           // ── O aplikácii ───────────────────────────────────────────────

@@ -53,6 +53,10 @@ class WeeklyInvoiceService {
         0.0, (sum, o) => sum + (o.calculatedTotal ?? 0));
     final craftsmanAmount = double.parse(
         (totalAmount / 1.1).toStringAsFixed(2));
+    // DPH zo zákaziek (0 pre zákazky vytvorené pred zavedením DPH).
+    final vatAmount = double.parse(
+        orders.fold<double>(0.0, (sum, o) => sum + o.vatAmount)
+            .toStringAsFixed(2));
 
     final batch = _db.batch();
     late WeeklyInvoice invoice;
@@ -66,12 +70,15 @@ class WeeklyInvoiceService {
       final newTotalA = double.parse(
           (current.totalAmount + totalAmount).toStringAsFixed(2));
       final newCraftA = double.parse((newTotalA / 1.1).toStringAsFixed(2));
+      final newVat = double.parse(
+          (current.vatAmount + vatAmount).toStringAsFixed(2));
 
       batch.update(doc.reference, {
         'orderIds': mergedIds,
         'totalHours': newTotalH,
         'totalAmount': newTotalA,
         'craftsmanAmount': newCraftA,
+        'vatAmount': newVat,
       });
 
       // Priraď weeklyInvoiceId k zákazkám
@@ -87,6 +94,7 @@ class WeeklyInvoiceService {
         totalHours: newTotalH,
         totalAmount: newTotalA,
         craftsmanAmount: newCraftA,
+        vatAmount: newVat,
       );
     } else {
       // Vytvor novú faktúru
@@ -103,6 +111,7 @@ class WeeklyInvoiceService {
         totalHours:      totalHours,
         totalAmount:     totalAmount,
         craftsmanAmount: craftsmanAmount,
+        vatAmount:       vatAmount,
         period:          period,
         periodStart:     start,
         periodEnd:       end,

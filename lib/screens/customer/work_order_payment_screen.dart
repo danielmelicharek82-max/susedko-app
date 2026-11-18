@@ -18,6 +18,8 @@ import 'package:intl/intl.dart';
 import '../../models/work_order.dart';
 import '../../services/work_order_service.dart';
 import 'work_order_qr_payment_screen.dart';
+import 'customer_work_orders_screen.dart';
+import 'customer_home.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -61,10 +63,20 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
     }
   }
 
+  bool get _isDeposit => widget.order.isFixed && widget.order.depositDue;
+
+  /// Suma, ktorá sa teraz platí (s DPH): záloha, doplatok alebo celok.
+  double? get _payAmount {
+    final o = widget.order;
+    if (o.isFixed) return _isDeposit ? o.depositGross : o.balanceGross;
+    return o.totalWithVat;
+  }
+
   Future<void> _pay({bool useGooglePay = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final total = widget.order.calculatedTotal;
+    // Platí sa suma vrátane DPH (pri zákazkách bez DPH je rovnaká ako doteraz).
+    final total = _payAmount;
     if (total == null) return;
 
     setState(() { _paying = true; _error = null; });
@@ -115,9 +127,25 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
         await Stripe.instance.presentPaymentSheet();
       }
 
+      // Záloha (pevná cena): stav zálohy nastaví SERVER (webhook). Klient ju
+      // nesmie sám označiť za zaplatenú.
+      if (_isDeposit) {
+        if (mounted) {
+          Navigator.popUntil(context, (route) => route.isFirst);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('order_deposit_paid_snack'.tr()),
+              backgroundColor: Colors.green));
+        }
+        return;
+      }
+
       await WorkOrderService.markPaid(widget.order.id, paymentIntentId);
 
       if (mounted) {
+        // Po platbe zákazníka presmeruj na Objednávky → História, kde hneď
+        // vidí tlačidlo na ohodnotenie remeselníka (rovnako ako pri faktúre).
+        CustomerWorkOrdersScreen.requestedTab.value = 2;
+        CustomerHomeScreen.requestedIndex.value = 2;
         Navigator.popUntil(context, (route) => route.isFirst);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('orderSuccess'.tr()),
@@ -142,7 +170,7 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final o = widget.order;
-    final total = o.calculatedTotal ?? 0;
+    final total = _payAmount ?? 0;
     final dateStr =
         DateFormat('EEE d. MMMM yyyy, HH:mm').format(o.scheduledAt);
     final craftsmanName =
@@ -270,6 +298,23 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: _kPrimary.withOpacity(0.15))),
               child: Column(children: [
+                if (o.isFixed) ...[
+                  _priceRow(Icons.lock_outline_rounded,
+                      'order_fixed_price'.tr(),
+                      '${(o.totalWithVat ?? 0).toStringAsFixed(2)} €'),
+                  if (o.depositPaid) ...[
+                    const SizedBox(height: 8),
+                    _priceRow(Icons.savings_outlined,
+                        'order_deposit_paid_row'.tr(),
+                        '− ${o.depositGross.toStringAsFixed(2)} €'),
+                  ],
+                  const SizedBox(height: 8),
+                  _priceRow(Icons.savings_outlined,
+                      _isDeposit
+                          ? 'order_deposit_material'.tr()
+                          : 'order_balance'.tr(),
+                      '${total.toStringAsFixed(2)} €'),
+                ] else ...[
                 _priceRow(Icons.timelapse_outlined,
                     'hoursLogged_worked'.tr(),
                     '${o.loggedHours?.toStringAsFixed(1) ?? '?'} h'),
@@ -277,6 +322,19 @@ class _WorkOrderPaymentScreenState extends State<WorkOrderPaymentScreen> {
                 _priceRow(Icons.euro_outlined,
                     'hoursLogged_rate'.tr(),
                     '${o.hourlyRate?.toStringAsFixed(0) ?? '?'} €/h'),
+                ],
+                // DPH sa zobrazí len pri zákazkách, ktoré ju obsahujú
+                // (vytvorené po zavedení DPH).
+                if (!o.isFixed && o.vatAmount > 0) ...[
+                  const SizedBox(height: 8),
+                  _priceRow(Icons.receipt_outlined,
+                      'invoice_label_net'.tr(),
+                      '${(o.calculatedTotal ?? 0).toStringAsFixed(2)} €'),
+                  const SizedBox(height: 8),
+                  _priceRow(Icons.percent_outlined,
+                      'invoice_label_vat'.tr(),
+                      '${o.vatAmount.toStringAsFixed(2)} €'),
+                ],
                 const SizedBox(height: 10),
                 const Divider(),
                 const SizedBox(height: 10),

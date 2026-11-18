@@ -1,6 +1,7 @@
 // lib/models/craftsman.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/pricing.dart';
 
 class Craftsman {
   final String id;
@@ -51,9 +52,21 @@ class Craftsman {
   /// Cena ktorú vidí zákazník — ak nie je uložená, vypočíta sa +10%
   double? get displayRate {
     if (hourlyRateCustomer != null) return hourlyRateCustomer;
-    if (hourlyRate != null) return hourlyRate! * 1.10;
+    if (hourlyRate != null) return Pricing.customerNetRate(hourlyRate!);
     return null;
   }
+
+  /// Cena za hodinu pre zákazníka S DPH. Použi ju na zobrazenie, keď sa
+  /// zákazníkom ukazujú ceny s DPH (pozri Pricing.vatPercent).
+  double? get displayRateGross {
+    final net = displayRate;
+    return net == null ? null : Pricing.withVat(net);
+  }
+
+  /// Sadzba, ktorú vidí zákazník: s DPH, ak sú zapnuté ceny s DPH
+  /// (config/pricing.vatEnabled), inak bez DPH ako doteraz.
+  double? get displayRateForCustomer =>
+      Pricing.vatEnabled ? displayRateGross : displayRate;
 
   String? get fullAddress {
     if (streetAddress != null && cityName != null) return '$streetAddress, $cityName';

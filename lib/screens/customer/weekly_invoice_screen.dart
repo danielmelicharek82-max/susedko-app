@@ -60,7 +60,7 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
       final result = await FirebaseFunctions.instance
           .httpsCallable('createPaymentIntent')
           .call({
-        'amount':   (widget.invoice.totalAmount * 100).round(),
+        'amount':   (widget.invoice.totalWithVat * 100).round(),
         'currency': 'eur',
         'metadata': {
           'type':            'weekly_invoice_payment',
@@ -289,10 +289,21 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
                 _priceRow(Icons.percent_outlined,
                     'invoice_label_platform_fee'.tr(),
                     '${(inv.totalAmount - inv.craftsmanAmount).toStringAsFixed(2)} €'),
+                // DPH sa zobrazí len pri faktúrach, ktoré ju obsahujú
+                // (zákazky vytvorené po zavedení DPH).
+                if (inv.vatAmount > 0) ...[
+                  const Divider(height: 20),
+                  _priceRow(Icons.receipt_outlined,
+                      'invoice_label_net'.tr(),
+                      '${inv.totalAmount.toStringAsFixed(2)} €'),
+                  _priceRow(Icons.percent_outlined,
+                      'invoice_label_vat'.tr(),
+                      '${inv.vatAmount.toStringAsFixed(2)} €'),
+                ],
                 const Divider(height: 20),
                 _priceRow(Icons.payments_outlined,
                     'invoice_label_total'.tr(),
-                    '${inv.totalAmount.toStringAsFixed(2)} €',
+                    '${inv.totalWithVat.toStringAsFixed(2)} €',
                     bold: true, large: true, color: _kPrimary),
               ])),
             const SizedBox(height: 14),
@@ -365,7 +376,7 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
                                 fontWeight: FontWeight.w500)),
                             const SizedBox(width: 8),
                             Text(
-                              '${inv.totalAmount.toStringAsFixed(2)} €',
+                              '${inv.totalWithVat.toStringAsFixed(2)} €',
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 14)),
                           ]))),
@@ -415,7 +426,7 @@ class _WeeklyInvoiceScreenState extends State<WeeklyInvoiceScreen> {
                   Text(
                     _paying
                         ? 'loading'.tr()
-                        : 'invoice_pay_btn'.tr(namedArgs: {'total': inv.totalAmount.toStringAsFixed(2)}),
+                        : 'invoice_pay_btn'.tr(namedArgs: {'total': inv.totalWithVat.toStringAsFixed(2)}),
                     style: const TextStyle(color: Colors.white,
                         fontWeight: FontWeight.bold, fontSize: 16)),
                 ]))),

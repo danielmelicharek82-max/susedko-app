@@ -13,6 +13,7 @@ import 'work_order_payment_screen.dart';
 import 'weekly_invoice_screen.dart';
 import '../review_screen.dart';
 import '../chat_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -335,8 +336,92 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
               ]),
             ],
 
+            // ── PEVNÁ CENA: cena, záloha, kontakt ─────────────────────
+            if (o.isFixed) ...[
+              const SizedBox(height: 10),
+              _fixedCustomerBox(o),
+              if (o.contacts != null && o.status != WorkOrderStatus.cancelled)
+                _fixedContactBox(o),
+            ],
+
+            // ── PEVNÁ CENA: záloha na materiál ────────────────────────
+            if (o.isFixed && o.depositDue &&
+                (o.status == WorkOrderStatus.confirmed ||
+                 o.status == WorkOrderStatus.inProgress)) ...[
+              const SizedBox(height: 10),
+              _alertBox(
+                color: Colors.orange,
+                icon: Icons.savings_outlined,
+                title: 'order_pay_deposit_title'.tr(),
+                text: 'order_pay_deposit_desc'.tr()),
+              const SizedBox(height: 8),
+              _gradientBtn(
+                label: 'order_pay_deposit_btn'.tr(namedArgs: {
+                  'deposit': o.depositGross.toStringAsFixed(2)}),
+                icon: Icons.payment_outlined,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => WorkOrderPaymentScreen(order: o)))),
+            ],
+
+            // ── PEVNÁ CENA: zrušenie zákazky ──────────────────────────
+            if (o.isFixed && (o.status == WorkOrderStatus.pending ||
+                o.status == WorkOrderStatus.confirmed)) ...[
+              const SizedBox(height: 8),
+              _outlineBtn(
+                label: 'order_cancel_btn'.tr(),
+                icon: Icons.close_rounded, color: Colors.red,
+                onTap: () => _cancelFixed(o)),
+            ],
+
+            // ── PEVNÁ CENA: remeselník ohlásil dokončenie ─────────────
+            if (o.isFixed && o.status == WorkOrderStatus.hoursLogged) ...[
+              const SizedBox(height: 10),
+              _alertBox(
+                color: Colors.teal,
+                icon: Icons.task_alt_rounded,
+                title: 'order_done_customer_title'.tr(),
+                text: 'order_done_customer_desc'.tr(namedArgs: {
+                  'balance': (o.balanceGross ?? 0).toStringAsFixed(2)})),
+              const SizedBox(height: 8),
+              _gradientBtn(
+                label: 'order_approve_pay_btn'.tr(namedArgs: {
+                  'balance': (o.balanceGross ?? 0).toStringAsFixed(2)}),
+                icon: Icons.check_circle_outline,
+                onTap: () => _approveFixed(o)),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(child: _outlineBtn(
+                    label: 'requestAdjustment'.tr(),
+                    icon: Icons.refresh, color: Colors.orange,
+                    onTap: () => _showReworkDialog(o))),
+                const SizedBox(width: 8),
+                Expanded(child: _outlineBtn(
+                    label: 'reject'.tr(),
+                    icon: Icons.flag_outlined, color: Colors.red,
+                    onTap: () => _showRejectInfoDialog(o))),
+              ]),
+            ],
+
+            // ── PEVNÁ CENA: zrušená zákazka — osud zálohy ─────────────
+            if (o.isFixed && o.status == WorkOrderStatus.cancelled &&
+                const ['refund_pending_decision', 'refunded', 'kept',
+                       'refund_failed'].contains(o.depositStatus)) ...[
+              const SizedBox(height: 10),
+              _alertBox(
+                color: o.depositStatus == 'kept' || o.depositStatus == 'refund_failed'
+                    ? Colors.orange : Colors.green,
+                icon: Icons.savings_outlined,
+                title: 'order_deposit'.tr(),
+                text: switch (o.depositStatus) {
+                  'refund_pending_decision' => 'order_cust_deposit_pending'.tr(),
+                  'refunded' => 'order_cust_deposit_refunded'.tr(),
+                  'kept' => 'order_cust_deposit_kept'.tr(),
+                  _ => 'order_cust_deposit_failed'.tr(),
+                }),
+            ],
+
             // ── VIACDŇOVÁ ZÁKAZKA: schvaľovanie po dňoch ─────────────
-            if (o.status == WorkOrderStatus.inProgress && o.isMultiDay) ...[
+            if (o.status == WorkOrderStatus.inProgress && o.isMultiDay && !o.isFixed) ...[
               const SizedBox(height: 12),
               _buildCustomerDailyLogsSection(o),
             ],
@@ -355,7 +440,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             ],
 
             // ── HOURS TO CONFIRM ──────────────────────────────────────
-            if (o.status == WorkOrderStatus.hoursLogged) ...[
+            if (o.status == WorkOrderStatus.hoursLogged && !o.isFixed) ...[
               const SizedBox(height: 12),
               _hoursCard(o),
               const SizedBox(height: 10),
@@ -434,7 +519,18 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             ],
 
             // ── PAYMENT DUE — okamžitá platba ─────────────────────────
-            if (o.status == WorkOrderStatus.paymentDue &&
+            if (o.status == WorkOrderStatus.paymentDue && o.isFixed &&
+                o.weeklyInvoiceId == null) ...[
+              const SizedBox(height: 12),
+              _gradientBtn(
+                label: 'payBtn'.tr(namedArgs: {
+                  'total': (o.balanceGross ?? 0).toStringAsFixed(2)}),
+                icon: Icons.payment_outlined,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => WorkOrderPaymentScreen(order: o)))),
+            ],
+
+            if (o.status == WorkOrderStatus.paymentDue && !o.isFixed &&
                 o.weeklyInvoiceId == null) ...[
               const SizedBox(height: 12),
               Container(
@@ -527,7 +623,8 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                   const SizedBox(width: 8),
                   Text(
                     'paid_label'.tr(namedArgs: {
-                      'total': o.calculatedTotal?.toStringAsFixed(2) ?? '?',
+                      'total': (o.isFixed ? o.totalWithVat : o.calculatedTotal)
+                              ?.toStringAsFixed(2) ?? '?',
                     }),
                     style: TextStyle(fontSize: 13,
                         color: Colors.green.shade700,
@@ -769,7 +866,7 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
   }
 
   // ── Hours card ─────────────────────────────────────────────────────────────
-  Widget _hoursCard(WorkOrder o) => Container(
+  Widget _hoursCard(WorkOrder o) => o.isFixed ? const SizedBox.shrink() : Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       gradient: LinearGradient(colors: [
@@ -1462,8 +1559,133 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
 
     if (confirmed == true && mounted) {
       // Zobraz dialóg výberu platby namiesto okamžitého paymentDue
-      await _showPaymentChoiceDialog(o);
+      if (o.isFixed) {
+        await _approveFixed(o);
+      } else {
+        await _showPaymentChoiceDialog(o);
+      }
     }
+  }
+
+  Future<void> _cancelFixed(WorkOrder o) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('order_cancel_title'.tr()),
+        content: Text(o.depositPaid
+            ? 'order_cancel_customer_paid_desc'.tr()
+            : 'order_cancel_desc'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('order_cancel_confirm'.tr(),
+                  style: const TextStyle(color: Colors.red))),
+        ]));
+    if (ok != true) return;
+    try {
+      await WorkOrderService.cancel(o.id);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  // ── Pevná cena: schválenie dokončenia → rovno doplatok ─────────────────────
+  Future<void> _approveFixed(WorkOrder o) async {
+    try {
+      await WorkOrderService.approveFixedAndPay(o.id);
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(
+          builder: (_) => WorkOrderPaymentScreen(order: o.copyWith(
+            status: WorkOrderStatus.paymentDue,
+            paymentMode: PaymentMode.immediate,
+          ))));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Widget _fixedCustomerBox(WorkOrder o) {
+    final net = o.totalAmount ?? 0;
+    final total = o.totalWithVat ?? net;
+    final depStatus = switch (o.depositStatus) {
+      'due'  => 'order_deposit_due'.tr(),
+      'paid' => 'order_deposit_paid'.tr(),
+      _ => null,
+    };
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _kPrimary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kPrimary.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.lock_outline_rounded, size: 16, color: _kPrimary),
+          const SizedBox(width: 6),
+          Text('order_fixed_price'.tr(), style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 12, color: _kPrimary)),
+        ]),
+        const SizedBox(height: 8),
+        if ((o.fixedMaterialNet ?? 0) > 0) ...[
+          _priceRow(Icons.handyman_outlined, 'quote_labor_short'.tr(),
+              '${(o.fixedLaborNet ?? 0).toStringAsFixed(2)} €'),
+          _priceRow(Icons.inventory_2_outlined, 'quote_material_short'.tr(),
+              '${(o.fixedMaterialNet ?? 0).toStringAsFixed(2)} €'),
+        ],
+        if (o.vatPercent > 0)
+          _priceRow(Icons.percent_rounded, 'quote_vat'.tr(),
+              '${o.vatAmount.toStringAsFixed(2)} €'),
+        _priceRow(Icons.payments_outlined, 'quote_total'.tr(),
+            '${total.toStringAsFixed(2)} €', bold: true, color: _kPrimary),
+        if (depStatus != null)
+          _priceRow(Icons.savings_outlined, 'order_deposit'.tr(),
+              '${o.depositGross.toStringAsFixed(2)} € — $depStatus'),
+      ]));
+  }
+
+  Widget _fixedContactBox(WorkOrder o) {
+    final c = o.contactOf(false);
+    final phone = (c?['phone'] as String?)?.trim();
+    final email = (c?['email'] as String?)?.trim();
+    if ((phone == null || phone.isEmpty) && (email == null || email.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    Future<void> open(Uri u) async {
+      if (!await launchUrl(u) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('error'.tr())));
+      }
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.25))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('order_contact_title'.tr(), style: TextStyle(
+            fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green.shade800)),
+        const SizedBox(height: 4),
+        Text('order_contact_hint_customer'.tr(),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          if (phone != null && phone.isNotEmpty)
+            ActionChip(
+              avatar: const Icon(Icons.phone_outlined, size: 16),
+              label: Text(phone),
+              onPressed: () => open(Uri(scheme: 'tel', path: phone))),
+          if (email != null && email.isNotEmpty)
+            ActionChip(
+              avatar: const Icon(Icons.mail_outline, size: 16),
+              label: Text(email),
+              onPressed: () => open(Uri(scheme: 'mailto', path: email))),
+        ]),
+      ]));
   }
 
   Future<void> _showEscalateDialog(WorkOrder o) async {

@@ -1,10 +1,13 @@
 // lib/screens/customer/request_interested_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../models/service_request.dart';
 import '../../models/craftsman.dart';
+import '../../models/quote.dart';
+import '../../utils/pricing.dart';
 import '../../services/service_request_service.dart';
 import '../auth/craftsman_register_form.dart'; // kProfessionIcons
 import 'create_work_order_screen.dart';
@@ -27,21 +30,74 @@ class _RequestInterestedScreenState
     extends State<RequestInterestedScreen> {
   List<_CraftsmanInterest> _interested = [];
   bool _loading = true;
+  int _loadSeq = 0;
+
+  // Cenové ponuky (len ak je dopyt s quoteRequired)
+  Map<String, Quote> _quotes = {};
+  StreamSubscription<List<Quote>>? _quotesSub;
+  bool _sortByPrice = true;
 
   @override
   void initState() {
     super.initState();
     _loadInterested();
+    if (widget.request.quoteRequired) _listenQuotes();
+  }
+
+  @override
+  void dispose() {
+    _quotesSub?.cancel();
+    super.dispose();
+  }
+
+  void _listenQuotes() {
+    _quotesSub = ServiceRequestService.watchQuotes(widget.request.id).listen(
+      (list) {
+        if (!mounted) return;
+        final map = {for (final q in list) q.craftsmanId: q};
+        final known = _interested.map((i) => i.craftsman.id).toSet();
+        final needReload = map.keys.any((id) => !known.contains(id));
+        setState(() => _quotes = map);
+        if (needReload) _loadInterested();
+      },
+      onError: (e) => debugPrint('quotes stream: $e'),
+    );
+  }
+
+  List<_CraftsmanInterest> get _visible {
+    final list = [..._interested];
+    if (widget.request.quoteRequired && _sortByPrice) {
+      list.sort((a, b) {
+        final qa = _quotes[a.craftsman.id];
+        final qb = _quotes[b.craftsman.id];
+        if (qa == null && qb == null) return 0;
+        if (qa == null) return 1;
+        if (qb == null) return -1;
+        return qa.customerGross.compareTo(qb.customerGross);
+      });
+    }
+    return list;
+  }
+
+  double? get _lowest {
+    if (_quotes.length < 2) return null;
+    return _quotes.values
+        .map((q) => q.customerGross)
+        .reduce((a, b) => a < b ? a : b);
   }
 
   Future<void> _loadInterested() async {
     final r = widget.request;
-    if (r.interestedCraftsmanIds.isEmpty) {
-      setState(() => _loading = false);
+    final seq = ++_loadSeq;
+    // Pri dopyte s ponukami berieme aj remeselníkov, ktorí ponuku poslali
+    // po otvorení obrazovky (r.interestedCraftsmanIds je len snímka).
+    final ids = <String>{...r.interestedCraftsmanIds, ..._quotes.keys};
+    if (ids.isEmpty) {
+      if (mounted) setState(() => _loading = false);
       return;
     }
     final result = <_CraftsmanInterest>[];
-    for (final uid in r.interestedCraftsmanIds) {
+    for (final uid in ids) {
       try {
         final doc = await FirebaseFirestore.instance
             .collection('craftsmen').doc(uid).get();
@@ -57,7 +113,7 @@ class _RequestInterestedScreenState
         debugPrint('Error loading craftsman $uid: $e');
       }
     }
-    if (mounted) {
+    if (mounted && seq == _loadSeq) {
       setState(() { _interested = result; _loading = false; });
     }
   }
@@ -124,6 +180,28 @@ class _RequestInterestedScreenState
           ]))));
 
     if (confirmed != true || !mounted) return;
+
+    // Dopyt s cenovými ponukami: výber = priama objednávka s PEVNOU CENOU.
+    // Dopyt neuzatvárame tu — urobí to server až pri vytvorení zákazky, takže
+    // ak zákazník objednávku nedokončí, dopyt zostáva otvorený.
+    if (widget.request.quoteRequired) {
+      final quote = _quotes[interest.craftsman.id];
+      if (quote == null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('quote_gone_err'.tr()),
+            backgroundColor: Colors.red));
+        return;
+      }
+      final created = await Navigator.push<bool>(context, MaterialPageRoute(
+          builder: (_) => CreateWorkOrderScreen(
+              craftsman: interest.craftsman,
+              serviceRequestId: widget.request.id,
+              initialProfession: widget.request.profession,
+              initialDescription: widget.request.description,
+              quote: quote)));
+      if (created == true && mounted) Navigator.pop(context, true);
+      return;
+    }
 
     try {
       await ServiceRequestService.selectCraftsman(
@@ -410,6 +488,9 @@ class _RequestInterestedScreenState
                 ])),
             ])),
 
+          if (widget.request.quoteRequired && _quotes.length > 1)
+            _buildSortBar(),
+
           // ── List ──────────────────────────────────────────────────────────
           Expanded(
             child: _loading
@@ -419,12 +500,110 @@ class _RequestInterestedScreenState
                     ? _buildEmpty()
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                        itemCount: _interested.length,
+                        itemCount: _visible.length,
                         itemBuilder: (ctx, i) =>
-                            _buildCraftsmanCard(_interested[i]))),
+                            _buildCraftsmanCard(_visible[i]))),
         ]),
       ),
     );
+  }
+
+  Widget _buildSortBar() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+    child: Row(children: [
+      ChoiceChip(
+        label: Text('quote_sort_price'.tr()),
+        selected: _sortByPrice,
+        onSelected: (_) => setState(() => _sortByPrice = true)),
+      const SizedBox(width: 8),
+      ChoiceChip(
+        label: Text('quote_sort_new'.tr()),
+        selected: !_sortByPrice,
+        onSelected: (_) => setState(() => _sortByPrice = false)),
+    ]));
+
+  String _eur(double v) => '${v.toStringAsFixed(2)} €';
+
+  Widget _qRow(String label, double value, {bool bold = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 3),
+    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: TextStyle(fontSize: bold ? 14 : 13,
+          fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          color: Colors.grey.shade800)),
+      Text(_eur(value), style: TextStyle(fontSize: bold ? 15 : 13,
+          fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+          color: bold ? _kPrimary : Colors.grey.shade800)),
+    ]));
+
+  Widget _buildQuoteBlock(_CraftsmanInterest interest) {
+    final q = _quotes[interest.craftsman.id];
+    if (q == null) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12)),
+        child: Text('quote_no_quote'.tr(),
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)));
+    }
+    final low = _lowest;
+    final isLowest = low != null && (q.customerGross - low).abs() < 0.005;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.3))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.request_quote_outlined,
+              size: 16, color: Colors.green.shade700),
+          const SizedBox(width: 6),
+          Expanded(child: Text('quote_badge'.tr(),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
+                  color: Colors.green.shade800))),
+          if (isLowest)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                  color: Colors.green.shade600,
+                  borderRadius: BorderRadius.circular(10)),
+              child: Text('quote_lowest'.tr(),
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 10.5, fontWeight: FontWeight.bold))),
+        ]),
+        const SizedBox(height: 8),
+        _qRow('quote_labor_short'.tr(), q.customerLabor),
+        if (q.material > 0)
+          _qRow('quote_material_short'.tr(), q.customerMaterial),
+        if (q.materialNote != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(q.materialNote!,
+                style: TextStyle(fontSize: 11.5,
+                    color: Colors.grey.shade600, height: 1.3))),
+        if (Pricing.vatEnabled)
+          _qRow('${'quote_vat'.tr()} ${Pricing.vatPercent.toStringAsFixed(0)} %',
+              q.customerVat),
+        const Divider(height: 14),
+        _qRow('${'quote_total'.tr()}${Pricing.vatSuffix}',
+            q.customerGross, bold: true),
+        if (q.duration != null) ...[
+          const SizedBox(height: 6),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.schedule_outlined,
+                size: 13, color: Colors.grey.shade500),
+            const SizedBox(width: 6),
+            Expanded(child: Text(q.duration!,
+                style: TextStyle(fontSize: 12.5,
+                    color: Colors.grey.shade700))),
+          ]),
+        ],
+      ]));
   }
 
   Widget _buildEmpty() => Center(
@@ -591,6 +770,9 @@ class _RequestInterestedScreenState
                 ])),
               const SizedBox(height: 10),
             ],
+
+            // Cenová ponuka
+            if (widget.request.quoteRequired) _buildQuoteBlock(interest),
 
             // Customer's reply (already sent)
             if (interest.customerReply != null &&

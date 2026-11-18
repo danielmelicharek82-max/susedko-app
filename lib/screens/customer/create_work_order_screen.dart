@@ -8,9 +8,12 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../models/craftsman.dart';
 import '../../models/work_order.dart';
+import '../../models/quote.dart';
 import '../../services/work_order_service.dart';
 import '../auth/craftsman_register_form.dart'; // kProfessionIcons
+import '../auth/billing_profile_screen.dart';
 import '../customer/service_request_screen.dart'; // kProfessionCategories
+import '../../utils/pricing.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -22,11 +25,19 @@ class CreateWorkOrderScreen extends StatefulWidget {
   final String? serviceRequestId;
   final String? initialProfession;
 
+  /// Vybraná cenová ponuka. Ak je zadaná, ide o zákazku s PEVNOU CENOU:
+  /// hodiny sa nevyberajú, cena je daná ponukou a zaplatí sa záloha na
+  /// materiál + doplatok po dokončení. [serviceRequestId] je povinné.
+  final Quote? quote;
+  final String? initialDescription;
+
   const CreateWorkOrderScreen({
     super.key,
     required this.craftsman,
     this.serviceRequestId,
     this.initialProfession,
+    this.quote,
+    this.initialDescription,
   });
 
   @override
@@ -61,7 +72,20 @@ class _CreateWorkOrderScreenState
         : kProfessionCategories.keys.first;
     _selectedCategory =
         kProfessionCategories[_selectedProfession]!.first;
+    if (widget.initialDescription != null) {
+      _descController.text = widget.initialDescription!;
+    }
     _loadAvailability();
+  }
+
+  bool get _isQuote => widget.quote != null;
+
+  /// Záloha na materiál s DPH (zrkadlí server: billing.fixedPricing).
+  double _quoteDepositGross(Quote q) {
+    final m = q.customerMaterial;
+    if (m <= 0) return 0;
+    final vat = Pricing.vatEnabled ? Pricing.vatAmount(m) : 0.0;
+    return Pricing.round2(m + vat);
   }
 
   @override
@@ -140,6 +164,11 @@ class _CreateWorkOrderScreenState
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    // Pred objednávkou musia byť vyplnené fakturačné údaje (telefón, adresa,
+    // pri firme IČO/DIČ) — potrebné na vystavenie faktúry.
+    if (!await BillingProfileScreen.ensureReady(context, 'customer')) return;
+    if (!mounted) return;
+
     setState(() => _submitting = true);
     try {
       final timeParts = _selectedSlot!.split(':');
@@ -183,11 +212,13 @@ class _CreateWorkOrderScreenState
         scheduledEndAt:   scheduledEndAt,
         estimatedHours:   _estimatedHours,
         serviceRequestId: widget.serviceRequestId,
-        hourlyRate:       widget.craftsman.displayRate,
+        hourlyRate:       _isQuote ? null : widget.craftsman.displayRate,
         createdAt:        DateTime.now(),
       );
 
-      await WorkOrderService.create(order);
+      await WorkOrderService.create(order,
+          fromQuote: _isQuote,
+          expectedNet: _isQuote ? widget.quote!.customerNet : null);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -196,8 +227,13 @@ class _CreateWorkOrderScreenState
         Navigator.pop(context, true);
       }
     } catch (e) {
+      final msg = e.toString();
+      String? friendly;
+      if (msg.contains('QUOTE_CHANGED')) friendly = 'quote_changed_err'.tr();
+      else if (msg.contains('QUOTE_NOT_FOUND')) friendly = 'quote_gone_err'.tr();
+      else if (msg.contains('REQUEST_CLOSED')) friendly = 'quote_request_closed_err'.tr();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${'error'.tr()}: $e'),
+          content: Text(friendly ?? '${'error'.tr()}: $e'),
           backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -207,7 +243,9 @@ class _CreateWorkOrderScreenState
   @override
   Widget build(BuildContext context) {
     final slots = _slotsForDay(_selectedDay);
-    final displayRate = widget.craftsman.displayRate;
+    // Zobrazená sadzba (s DPH, ak sú ceny s DPH zapnuté). Na zákazku sa
+    // posiela sadzba bez DPH (widget.craftsman.displayRate vo _submit).
+    final displayRate = widget.craftsman.displayRateForCustomer;
     final profLabel = widget.craftsman.profession.startsWith('prof_')
         ? widget.craftsman.profession.tr()
         : widget.craftsman.profession;
@@ -321,7 +359,26 @@ class _CreateWorkOrderScreenState
                     ]),
                   ],
                 ])),
-                if (displayRate != null)
+                if (_isQuote)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [_kDeep, _kPrimary],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight),
+                      borderRadius: BorderRadius.circular(14)),
+                    child: Column(children: [
+                      Text('${(Pricing.vatEnabled ? widget.quote!.customerGross : widget.quote!.customerNet).toStringAsFixed(2)} €',
+                          style: const TextStyle(color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold)),
+                      Text('order_fixed_price'.tr(),
+                          style: TextStyle(color: Colors.white.withOpacity(0.8),
+                              fontSize: 10)),
+                    ]))
+                else if (displayRate != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 8),
@@ -336,7 +393,7 @@ class _CreateWorkOrderScreenState
                           style: const TextStyle(color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.bold)),
-                      Text('createWorkOrder_per_hour'.tr(),
+                      Text('createWorkOrder_per_hour'.tr() + Pricing.vatSuffix,
                           style: TextStyle(color: Colors.white.withOpacity(0.8),
                               fontSize: 10)),
                     ])),
@@ -480,6 +537,13 @@ class _CreateWorkOrderScreenState
                       horizontal: 14, vertical: 14)))),
             const SizedBox(height: 16),
 
+            // ── Pevná cena z ponuky ────────────────────────────────────
+            if (_isQuote) ...[
+              _sectionTitle('order_fixed_price'.tr(), Icons.lock_outline_rounded),
+              const SizedBox(height: 10),
+              _fixedPriceCard(widget.quote!),
+              const SizedBox(height: 20),
+            ] else ...[
             // ── Estimated hours ────────────────────────────────────────
             _sectionTitle('createWorkOrder_estimated'.tr(),
                 Icons.timer_outlined),
@@ -540,6 +604,7 @@ class _CreateWorkOrderScreenState
                         size: 18))),
               ])),
             const SizedBox(height: 20),
+            ],
 
             // ── Calendar ───────────────────────────────────────────────
             _sectionTitle('createWorkOrder_date'.tr(),
@@ -778,11 +843,20 @@ class _CreateWorkOrderScreenState
                               .format(_selectedDay!)),
                   _summaryRow(Icons.access_time_outlined,
                       _selectedSlot!),
-                  _summaryRow(Icons.timer_outlined,
-                      'summaryEstimated'.tr(namedArgs: {
-                        'hours': _estimatedHours.toString(),
-                      })),
-                  if (displayRate != null)
+                  if (_isQuote)
+                    _summaryRow(Icons.lock_outline_rounded,
+                        'order_fixed_summary'.tr(namedArgs: {
+                          'total': (Pricing.vatEnabled
+                                  ? widget.quote!.customerGross
+                                  : widget.quote!.customerNet)
+                              .toStringAsFixed(2),
+                        })),
+                  if (!_isQuote)
+                    _summaryRow(Icons.timer_outlined,
+                        'summaryEstimated'.tr(namedArgs: {
+                          'hours': _estimatedHours.toString(),
+                        })),
+                  if (!_isQuote && displayRate != null)
                     _summaryRow(Icons.euro_outlined,
                         'finalPriceNote'.tr(namedArgs: {
                           'total': (_estimatedHours * displayRate)
@@ -835,6 +909,52 @@ class _CreateWorkOrderScreenState
             }),
           ])),
       ),
+    );
+  }
+
+  Widget _fixedPriceCard(Quote q) {
+    final vatOn = Pricing.vatEnabled;
+    final deposit = _quoteDepositGross(q);
+    final total = vatOn ? q.customerGross : q.customerNet;
+    Widget row(String l, String v, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(children: [
+            Expanded(child: Text(l, style: TextStyle(
+                fontSize: 13, color: Colors.grey.shade700,
+                fontWeight: bold ? FontWeight.bold : FontWeight.normal))),
+            Text(v, style: TextStyle(fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                color: const Color(0xFF1E293B))),
+          ]));
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kPrimary.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        row('quote_labor_short'.tr(), '${q.customerLabor.toStringAsFixed(2)} €'),
+        if (q.customerMaterial > 0)
+          row('quote_material_short'.tr(), '${q.customerMaterial.toStringAsFixed(2)} €'),
+        if (vatOn)
+          row('quote_vat'.tr(), '${q.customerVat.toStringAsFixed(2)} €'),
+        const Divider(height: 16),
+        row('quote_total'.tr(), '${total.toStringAsFixed(2)} €', bold: true),
+        const SizedBox(height: 8),
+        if (deposit > 0)
+          Text('order_deposit_explain'.tr(namedArgs: {
+                'deposit': deposit.toStringAsFixed(2),
+                'balance': (total - deposit).toStringAsFixed(2),
+              }),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.4))
+        else
+          Text('order_no_deposit_explain'.tr(),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.4)),
+        const SizedBox(height: 6),
+        Text('order_price_final'.tr(),
+            style: TextStyle(fontSize: 12, color: _kPrimary,
+                fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 

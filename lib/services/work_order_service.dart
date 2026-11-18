@@ -40,7 +40,8 @@ class WorkOrderService {
   //   2. vytvorí work_order dokument
   //   3. odoberie slot z dostupnosti remeselníka
   //   4. pošle remeselníkovi push notifikáciu
-  static Future<String> create(WorkOrder order) async {
+  static Future<String> create(WorkOrder order,
+      {bool fromQuote = false, double? expectedNet}) async {
     if (FirebaseAuth.instance.currentUser == null) {
       throw Exception('NOT_AUTHENTICATED');
     }
@@ -61,6 +62,10 @@ class WorkOrderService {
         'scheduledEndAt': order.scheduledEndAt?.toIso8601String(),
         'estimatedHours': order.estimatedHours,
         'serviceRequestId': order.serviceRequestId,
+        // Pevná cena z cenovej ponuky: sumu berie server z ponuky; expectedNet
+        // je suma, ktorú zákazník videl a schválil (ochrana pred zmenou ponuky).
+        if (fromQuote) 'fromQuote': true,
+        if (fromQuote && expectedNet != null) 'expectedNet': expectedNet,
       });
 
       final orderId = result.data['orderId'] as String?;
@@ -79,6 +84,9 @@ class WorkOrderService {
         if (e.message == 'DAY_UNAVAILABLE') {
           throw Exception('DAY_UNAVAILABLE');
         }
+        if (e.message == 'QUOTE_CHANGED') throw Exception('QUOTE_CHANGED');
+        if (e.message == 'QUOTE_NOT_FOUND') throw Exception('QUOTE_NOT_FOUND');
+        if (e.message == 'REQUEST_CLOSED') throw Exception('REQUEST_CLOSED');
         throw Exception('SLOT_TAKEN');
       }
       if (e.code == 'unauthenticated') {
@@ -112,6 +120,38 @@ class WorkOrderService {
       });
     } on FirebaseFunctionsException catch (e) {
       throw Exception(e.message ?? 'Nepodarilo sa zrušiť objednávku');
+    }
+  }
+
+  // ── PEVNÁ CENA ────────────────────────────────────────────────────────────
+  // Remeselník ohlási dokončenie práce. Zákazník ju schváli (alebo žiada
+  // úpravu) rovnakou cestou ako pri hodinách; cena sa nemení.
+  static Future<void> completeFixed(String id) async {
+    await _db.collection(_col).doc(id).update({
+      'status': WorkOrderStatus.hoursLogged.name,
+      'reworkNote': null,
+      'craftsmanInsistNote': null,
+    });
+  }
+
+  // Zákazník schválil dokončenú prácu → ide rovno na doplatok (bez týždennej
+  // faktúry a bez výberu spôsobu platby).
+  static Future<void> approveFixedAndPay(String id) async {
+    await _db.collection(_col).doc(id).update({
+      'status': WorkOrderStatus.paymentDue.name,
+      'paymentMode': PaymentMode.immediate.name,
+      'paymentStatus': WorkOrderPaymentStatus.approved.name,
+      'hoursApprovedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Remeselník rozhodne o zálohe po zrušení zákazníkom.
+  static Future<void> decideDepositRefund(String id, {required bool refund}) async {
+    try {
+      await _functions.httpsCallable('decideDepositRefund')
+          .call(<String, dynamic>{'orderId': id, 'refund': refund});
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? 'Nepodarilo sa spracovať rozhodnutie');
     }
   }
 

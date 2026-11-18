@@ -14,6 +14,7 @@ import '../auth/craftsman_register_form.dart';
 import 'craftsman_detail_screen.dart';
 import 'broadcast_request_screen.dart';
 import 'request_interested_screen.dart';
+import '../../utils/pricing.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -775,7 +776,7 @@ class _CraftsmanCard extends StatelessWidget {
                 const SizedBox(width: 3),
                 Text('(${craftsman.reviewCount})', style: TextStyle(
                     fontSize: 11, color: Colors.grey.shade400)),
-                if (craftsman.hourlyRate != null) ...[
+                if (craftsman.displayRateForCustomer != null) ...[
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -784,7 +785,7 @@ class _CraftsmanCard extends StatelessWidget {
                         begin: Alignment.topLeft, end: Alignment.bottomRight),
                       borderRadius: BorderRadius.circular(12)),
                     child: Text(
-                      '${(craftsman.hourlyRate! * 1.1).toStringAsFixed(0)} €/h',
+                      '${craftsman.displayRateForCustomer!.toStringAsFixed(0)} €/h${Pricing.vatSuffix}',
                       style: const TextStyle(fontSize: 12, color: Colors.white,
                           fontWeight: FontWeight.bold))),
                 ],

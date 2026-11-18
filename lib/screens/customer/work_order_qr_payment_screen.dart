@@ -11,6 +11,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/work_order.dart';
 import '../../services/work_order_service.dart';
+import 'customer_work_orders_screen.dart';
+import 'customer_home.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -55,7 +57,9 @@ class _WorkOrderQrPaymentScreenState
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final total = widget.order.calculatedTotal;
+    // Platí sa suma vrátane DPH (pri zákazkách bez DPH rovnaká ako doteraz).
+    // Skutočnú sumu si server prepočíta sám z dokumentu zákazky.
+    final total = _payAmount;
     if (total == null) return;
 
     setState(() {
@@ -101,10 +105,7 @@ class _WorkOrderQrPaymentScreenState
         .listen((snap) {
       if (!snap.exists || !mounted) return;
 
-      final status = snap.data()?['status'];
-      if (status == 'paid' || status == 'completed') {
-        _onPaymentSuccess();
-      }
+      if (_isPaidNow(snap.data())) _onPaymentSuccess();
     });
 
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
@@ -115,11 +116,25 @@ class _WorkOrderQrPaymentScreenState
           .doc(widget.order.id)
           .get();
 
-      final status = snap.data()?['status'];
-      if (status == 'paid' || status == 'completed') {
-        _onPaymentSuccess();
-      }
+      if (_isPaidNow(snap.data())) _onPaymentSuccess();
     });
+  }
+
+  /// Čo sa platí: pri pevnej cene buď záloha, alebo doplatok.
+  double? get _payAmount {
+    final o = widget.order;
+    if (o.isFixed) return o.depositDue ? o.depositGross : o.balanceGross;
+    return o.totalWithVat;
+  }
+
+  /// Záloha sa potvrdzuje poľom depositStatus, nie stavom zákazky.
+  bool _isPaidNow(Map<String, dynamic>? d) {
+    if (d == null) return false;
+    if (widget.order.isFixed && widget.order.depositDue) {
+      return d['depositStatus'] == 'paid';
+    }
+    final status = d['status'];
+    return status == 'paid' || status == 'completed';
   }
 
   void _onPaymentSuccess() {
@@ -133,6 +148,11 @@ class _WorkOrderQrPaymentScreenState
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
 
+      // Po platbe zákazníka presmeruj na Objednávky → História, kde hneď
+      // vidí tlačidlo na ohodnotenie remeselníka (rovnako ako pri ostatných
+      // platbách).
+      CustomerWorkOrdersScreen.requestedTab.value = 2;
+      CustomerHomeScreen.requestedIndex.value = 2;
       Navigator.popUntil(context, (route) => route.isFirst);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,7 +175,7 @@ class _WorkOrderQrPaymentScreenState
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.order.calculatedTotal ?? 0;
+    final total = _payAmount ?? 0;
     final craftsmanName =
         widget.order.craftsmanSnapshot?['name'] ?? 'craftsman'.tr();
 

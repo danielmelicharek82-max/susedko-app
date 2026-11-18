@@ -1,6 +1,9 @@
 // lib/screens/craftsman/service_request_map_screen.dart
 
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart' show GeoPoint;
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -14,6 +17,47 @@ const _kAccent  = Color(0xFF60A5FA);
 const _kBg      = Color(0xFFF8FAFC);
 
 const _kRadiusOptions = [5, 10, 25, 50, 100];
+
+// Rovnaký kľúč ako pri zadávaní hromadného dopytu (broadcast_request_screen).
+const _kGeoApiKey = 'AIzaSyBXuhp1jKR6dbxhAvOo7_WkX3wSZTAyyNE';
+
+/// Súradnice dopytov, ktoré ich v databáze nemajú (napr. dopyty zadané cez web
+/// portál, kde sa adresa nepreveduje na súradnice). Drží sa počas behu appky.
+final Map<String, GeoPoint?> _geoCache = {};
+
+Future<GeoPoint?> _geocode(String address) async {
+  try {
+    final addr = address.trim();
+    final query = (addr.toLowerCase().contains('slovak') ||
+            addr.toLowerCase().contains('slovensko'))
+        ? addr : '$addr, Slovakia';
+    final url = Uri.parse('https://maps.googleapis.com/maps/api/geocode/json'
+        '?address=${Uri.encodeComponent(query)}&key=$_kGeoApiKey');
+    final res = await http.get(url).timeout(const Duration(seconds: 8));
+    if (res.statusCode != 200) return null;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    if (json['status'] != 'OK') return null;
+    final results = json['results'] as List;
+    if (results.isEmpty) return null;
+    final loc = results[0]['geometry']['location'];
+    return GeoPoint((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble());
+  } catch (e) {
+    debugPrint('Geocoding error: $e');
+    return null;
+  }
+}
+
+/// Vzdialenosť dvoch bodov v km (haversine). Predchádzajúci výpočet nepoužíval
+/// sin/asin, takže vracal výrazne príliš malé vzdialenosti.
+double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
+  const r = 6371.0;
+  double rad(double d) => d * pi / 180.0;
+  final dLat = rad(lat2 - lat1);
+  final dLon = rad(lon2 - lon1);
+  final a = sin(dLat / 2) * sin(dLat / 2) +
+      cos(rad(lat1)) * cos(rad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+  return r * 2 * asin(min(1.0, sqrt(a)));
+}
 
 class ServiceRequestMapScreen extends StatefulWidget {
   final List<String> professions;
@@ -41,6 +85,8 @@ class _ServiceRequestMapScreenState extends State<ServiceRequestMapScreen> {
 
   Set<Marker> _markers = {};
   bool _loading = true;
+  int _withoutLocation = 0;   // dopyty bez adresy/súradníc (na mape nie sú)
+  bool _fitted = false;       // kamera sa automaticky prispôsobí po prvých dátach
 
   @override
   void initState() { super.initState(); _startListening(); }
@@ -52,21 +98,64 @@ class _ServiceRequestMapScreenState extends State<ServiceRequestMapScreen> {
     _sub?.cancel();
     _sub = ServiceRequestService.watchOpenRequests(widget.professions).listen(
       (requests) {
+        if (!mounted) return;
         _allRequests = requests;
         _applyFilters();
+        _geocodeMissing();
         setState(() => _loading = false);
+        // Kamera sa musí prispôsobiť až KEĎ prídu dáta (predtým sa to
+        // skúsilo len 500 ms po vytvorení mapy, typicky ešte bez dopytov).
+        if (!_fitted && _filteredRequests.isNotEmpty && _mapController.isCompleted) {
+          _fitted = true;
+          _moveCameraToFit();
+        }
       },
-      onError: (_) => setState(() => _loading = false),
+      onError: (e) {
+        // Chýbajúci Firestore index sa ukáže tu — vypíš ho do konzoly.
+        debugPrint('ServiceRequestMapScreen: chyba streamu dopytov: $e');
+        if (mounted) setState(() => _loading = false);
+      },
     );
   }
 
+  /// Dopyty bez súradníc, ktoré majú adresu, doplníme zo cache.
+  List<ServiceRequest> _withResolvedLocations() => _allRequests.map((r) {
+        if (r.location != null) return r;
+        final g = _geoCache[r.id];
+        return g != null ? r.copyWith(location: g) : r;
+      }).toList();
+
+  /// Súradnice sa doplnia na pozadí (Geocoding); mapa sa potom obnoví.
+  Future<void> _geocodeMissing() async {
+    final todo = _allRequests.where((r) =>
+        r.location == null &&
+        !_geoCache.containsKey(r.id) &&
+        (r.address ?? '').trim().isNotEmpty).take(30).toList();
+    if (todo.isEmpty) return;
+    for (final r in todo) {
+      _geoCache[r.id] = await _geocode(r.address!);
+      if (!mounted) return;
+    }
+    _applyFilters();
+    setState(() {});
+    if (_filteredRequests.isNotEmpty && _mapController.isCompleted) {
+      _fitted = true;
+      _moveCameraToFit();
+    }
+  }
+
   void _applyFilters() {
-    List<ServiceRequest> filtered = _allRequests.where((r) => r.location != null).toList();
+    final resolved = _withResolvedLocations();
+    _withoutLocation = resolved.where((r) => r.location == null).length;
+    List<ServiceRequest> filtered = resolved.where((r) => r.location != null).toList();
     if (_selectedProfession != null) {
-      filtered = filtered.where((r) => r.profession == _selectedProfession).toList();
+      // Dopyt môže mať viac profesií — porovnávame aj so zoznamom `professions`.
+      filtered = filtered.where((r) =>
+          r.profession == _selectedProfession ||
+          r.professions.contains(_selectedProfession)).toList();
     }
     filtered = filtered.where((r) {
-      final dist = _distanceKm(
+      final dist = _haversineKm(
         widget.craftsmanLocation.latitude, widget.craftsmanLocation.longitude,
         r.location!.latitude, r.location!.longitude,
       );
@@ -104,17 +193,6 @@ class _ServiceRequestMapScreenState extends State<ServiceRequestMapScreen> {
       ),
     );
   }
-
-  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
-    const r = 6371.0;
-    final dLat = _deg2rad(lat2 - lat1);
-    final dLon = _deg2rad(lon2 - lon1);
-    final a = (dLat / 2) * (dLat / 2) +
-        cos(_deg2rad(lat1)) * cos(_deg2rad(lat2)) * (dLon / 2) * (dLon / 2);
-    return r * 2 * (a < 1 ? a : 1);
-  }
-
-  double _deg2rad(double deg) => deg * (3.141592653589793 / 180.0);
 
   Future<void> _moveCameraToFit() async {
     if (_filteredRequests.isEmpty) return;
@@ -220,6 +298,22 @@ class _ServiceRequestMapScreenState extends State<ServiceRequestMapScreen> {
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
             ),
+            if (!_loading && _withoutLocation > 0)
+              Positioned(
+                left: 12, right: 12, top: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8)]),
+                  child: Row(children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'map_requests_hidden_no_address'.tr(namedArgs: {'count': _withoutLocation.toString()}),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
+                  ]))),
             if (_loading)
               const Center(child: CircularProgressIndicator(color: _kPrimary)),
             if (!_loading && _filteredRequests.isEmpty)
@@ -315,18 +409,9 @@ class _RequestBottomSheet extends StatelessWidget {
     return key != null ? key.tr() : v;
   }
 
-  double _distanceKm() {
-    const r = 6371.0;
-    final dLat = _deg2rad(request.location!.latitude - craftsmanLocation.latitude);
-    final dLon = _deg2rad(request.location!.longitude - craftsmanLocation.longitude);
-    final a = (dLat / 2) * (dLat / 2) +
-        cos(_deg2rad(craftsmanLocation.latitude)) *
-        cos(_deg2rad(request.location!.latitude)) *
-        (dLon / 2) * (dLon / 2);
-    return r * 2 * (a < 1 ? a : 1);
-  }
-
-  double _deg2rad(double deg) => deg * (3.141592653589793 / 180.0);
+  double _distanceKm() => _haversineKm(
+      craftsmanLocation.latitude, craftsmanLocation.longitude,
+      request.location!.latitude, request.location!.longitude);
 
   @override
   Widget build(BuildContext context) {

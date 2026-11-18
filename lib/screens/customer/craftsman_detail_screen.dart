@@ -12,6 +12,7 @@ import '../../services/chat_service.dart';
 import '../auth/craftsman_register_form.dart'; // kProfessionIcons
 import 'create_work_order_screen.dart';
 import 'service_request_screen.dart';
+import '../../utils/pricing.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -64,8 +65,8 @@ class _CraftsmanDetailScreenState
     final professions = c.skills.isNotEmpty
         ? c.skills.map((s) => s.startsWith('prof_') ? s.tr() : s).join(', ')
         : (c.profession.startsWith('prof_') ? c.profession.tr() : c.profession);
-    final rate = c.displayRate != null
-        ? '\n💶 ${c.displayRate!.toStringAsFixed(0)} €/h' : '';
+    final rate = c.displayRateForCustomer != null
+        ? '\n💶 ${c.displayRateForCustomer!.toStringAsFixed(0)} €/h${Pricing.vatSuffix}' : '';
     final city = c.cityName != null ? '\n📍 ${c.cityName}' : '';
     final text = '🔧 ${c.name} — Susedko\n\n$professions$city$rate\n\n'
         '⭐ ${c.rating.toStringAsFixed(1)}/5.0\n\n📲 Susedko';
@@ -75,7 +76,7 @@ class _CraftsmanDetailScreenState
   @override
   Widget build(BuildContext context) {
     final c = widget.craftsman;
-    final displayRate = c.displayRate;
+    final displayRate = c.displayRateForCustomer;
     final profLabel = c.profession.startsWith('prof_')
         ? c.profession.tr() : c.profession;
 
@@ -193,7 +194,7 @@ class _CraftsmanDetailScreenState
                       icon: Icons.euro_rounded,
                       iconColor: _kPrimary,
                       value: '${displayRate.toStringAsFixed(0)} €',
-                      label: 'craftsmanDetail_per_hour'.tr())),
+                      label: '${'craftsmanDetail_per_hour'.tr()}${Pricing.vatSuffix}')),
                   if (c.isVerified) ...[
                     Container(width: 1, height: 50,
                         color: Colors.grey.shade200),

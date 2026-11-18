@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/service_request.dart';
+import '../models/quote.dart';
 import 'package:async/async.dart';
 
 class ServiceRequestService {
@@ -41,6 +42,8 @@ class ServiceRequestService {
     double? budget,
     required List<String> photoUrls,
     required String timeframe,
+    bool quoteRequired = false,
+    DateTime? quoteDeadline,
   }) async {
     assert(professions.isNotEmpty && professions.length <= 3,
         'professions must contain between 1 and 3 items');
@@ -56,6 +59,9 @@ class ServiceRequestService {
       'budget':      budget,
       'photoUrls':   photoUrls,
       'timeframe':   timeframe,
+      'quoteRequired': quoteRequired,
+      'quoteDeadline': quoteDeadline != null
+          ? Timestamp.fromDate(quoteDeadline) : null,
     });
   }
 
@@ -80,6 +86,89 @@ class ServiceRequestService {
         'timestamp':     FieldValue.serverTimestamp(),
       },
     });
+  }
+
+  /// Remeselník sa odhlási z prejaveného záujmu (dopyt bez cenovej ponuky).
+  /// Odstráni ho zo záujemcov a zmaže jeho záznam (vrátane odpovede zákazníka).
+  static Future<void> withdrawInterest({
+    required String requestId,
+    required String craftsmanId,
+  }) async {
+    await _db.collection(_col).doc(requestId).update({
+      'interestedCraftsmanIds': FieldValue.arrayRemove([craftsmanId]),
+      'interest_$craftsmanId': FieldValue.delete(),
+    });
+  }
+
+  // ── Cenové ponuky ─────────────────────────────────────────────────────────
+  // service_requests/{requestId}/quotes/{craftsmanId}  (jedna na remeselníka)
+
+  /// Odošle alebo upraví ponuku. Zároveň remeselníka zapíše medzi záujemcov,
+  /// takže funguje ako "prejavenie záujmu" (a zákazník ho vidí v zozname).
+  /// Dotované cesty (interest_<uid>.pole) sa MERGUJÚ — neprepíšu customerReply.
+  static Future<void> submitQuote({
+    required String requestId,
+    required Quote quote,
+  }) async {
+    final id = quote.craftsmanId;
+    final reqRef = _db.collection(_col).doc(requestId);
+    final qRef = reqRef.collection('quotes').doc(id);
+    final existing = await qRef.get();
+    final isNew = !existing.exists;
+
+    final batch = _db.batch();
+    batch.set(qRef, {
+      ...quote.toMap(),
+      'createdAt': isNew
+          ? FieldValue.serverTimestamp()
+          : (existing.data()?['createdAt'] ?? FieldValue.serverTimestamp()),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    batch.update(reqRef, {
+      'interestedCraftsmanIds': FieldValue.arrayUnion([id]),
+      'interest_$id.craftsmanId':   id,
+      'interest_$id.craftsmanName': quote.craftsmanName,
+      'interest_$id.message':       quote.note,
+      'interest_$id.hasQuote':      true,
+      if (isNew) 'interest_$id.timestamp': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  /// Stiahne ponuku (remeselník sa tým vráti do stavu "bez záujmu").
+  static Future<void> withdrawQuote({
+    required String requestId,
+    required String craftsmanId,
+  }) async {
+    final reqRef = _db.collection(_col).doc(requestId);
+    final batch = _db.batch();
+    batch.delete(reqRef.collection('quotes').doc(craftsmanId));
+    batch.update(reqRef, {
+      'interestedCraftsmanIds': FieldValue.arrayRemove([craftsmanId]),
+      'interest_$craftsmanId': FieldValue.delete(),
+    });
+    await batch.commit();
+  }
+
+  /// Zákazník: všetky ponuky k svojmu dopytu.
+  static Stream<List<Quote>> watchQuotes(String requestId) {
+    return _db
+        .collection(_col)
+        .doc(requestId)
+        .collection('quotes')
+        .snapshots()
+        .map((s) => s.docs.map((d) => Quote.fromMap(d.id, d.data())).toList());
+  }
+
+  /// Remeselník: jeho vlastná ponuka (null, ak ešte neposlal).
+  static Stream<Quote?> watchMyQuote(String requestId, String craftsmanId) {
+    return _db
+        .collection(_col)
+        .doc(requestId)
+        .collection('quotes')
+        .doc(craftsmanId)
+        .snapshots()
+        .map((d) => d.exists ? Quote.fromMap(d.id, d.data()!) : null);
   }
 
   // Zákazník vyberie remeselníka z broadcast požiadavky

@@ -35,6 +35,12 @@ class ServiceRequest {
   final DateTime createdAt;
   final String? craftsmanReply;
 
+  // ── Cenové ponuky (len broadcast) ───────────────────────────────────────
+  // quoteRequired = remeselník sa môže zapojiť len s cenovou ponukou
+  // (práca + materiál). Ponuky sú v subkolekcii quotes (viď Quote).
+  final bool quoteRequired;
+  final DateTime? quoteDeadline;
+
   // ── Raw Firestore document data ────────────────────────────────────────
   // toMap()/fromFirestore() only know about the fixed fields above. Dynamic
   // per-craftsman fields written by the web app (e.g. `interest_<uid>` maps
@@ -71,6 +77,8 @@ class ServiceRequest {
     this.interestedCraftsmanIds = const [],
     required this.createdAt,
     this.craftsmanReply,
+    this.quoteRequired = false,
+    this.quoteDeadline,
     this.rawData = const {},
     this.adminCustomerEmail,
     this.adminCustomerPhone,
@@ -81,6 +89,14 @@ class ServiceRequest {
             : professions;
 
   bool get isBroadcast => type == ServiceRequestType.broadcast;
+
+  /// Termín na ponuky uplynul (platí do konca zvoleného dňa).
+  bool get quoteExpired {
+    final d = quoteDeadline;
+    if (d == null) return false;
+    return DateTime.now()
+        .isAfter(DateTime(d.year, d.month, d.day, 23, 59, 59));
+  }
 
   Map<String, dynamic> toMap() => {
     'customerId':             customerId,
@@ -104,6 +120,9 @@ class ServiceRequest {
     'interestedCraftsmanIds': interestedCraftsmanIds,
     'createdAt':              Timestamp.fromDate(createdAt),
     'craftsmanReply':         craftsmanReply,
+    'quoteRequired':          quoteRequired,
+    'quoteDeadline':          quoteDeadline != null
+        ? Timestamp.fromDate(quoteDeadline!) : null,
     // adminContacts sú transient — neukladáme ich do Firestore
   };
 
@@ -141,6 +160,9 @@ class ServiceRequest {
           List<String>.from(map['interestedCraftsmanIds'] ?? []),
       createdAt:     (map['createdAt'] as Timestamp).toDate(),
       craftsmanReply: map['craftsmanReply'],
+      quoteRequired: map['quoteRequired'] == true,
+      quoteDeadline: map['quoteDeadline'] is Timestamp
+          ? (map['quoteDeadline'] as Timestamp).toDate() : null,
       rawData:       map,
     );
   }
@@ -185,6 +207,8 @@ class ServiceRequest {
           interestedCraftsmanIds ?? this.interestedCraftsmanIds,
       createdAt:     createdAt,
       craftsmanReply: craftsmanReply ?? this.craftsmanReply,
+      quoteRequired: quoteRequired,
+      quoteDeadline: quoteDeadline,
       rawData:       rawData,
       // zachovaj admin kontakty
       adminCustomerEmail:  adminCustomerEmail,
@@ -224,6 +248,8 @@ class ServiceRequest {
       interestedCraftsmanIds: interestedCraftsmanIds,
       createdAt:     createdAt,
       craftsmanReply: craftsmanReply,
+      quoteRequired: quoteRequired,
+      quoteDeadline: quoteDeadline,
       rawData:       rawData,
       adminCustomerEmail:  customerEmail ?? adminCustomerEmail,
       adminCustomerPhone:  customerPhone ?? adminCustomerPhone,

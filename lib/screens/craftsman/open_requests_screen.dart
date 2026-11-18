@@ -6,7 +6,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/service_request.dart';
+import '../../models/quote.dart';
+import '../../utils/pricing.dart';
 import '../../services/service_request_service.dart';
+import '../auth/billing_profile_screen.dart';
+import 'craftsman_calendar_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -58,6 +62,11 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
           backgroundColor: Colors.orange));
       return;
     }
+
+    // Do dopytu sa môže zapojiť len remeselník s kompletnými fakturačnými
+    // údajmi (inak by zákazku nemohol prijať ani vyfakturovať).
+    if (!await BillingProfileScreen.ensureReady(context, 'craftsman')) return;
+    if (!mounted) return;
 
     final messageController = TextEditingController();
 
@@ -193,11 +202,259 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
           SnackBar(
               content: Text('openRequests_interest_snack'.tr()),
               backgroundColor: Colors.green));
+      await _maybeAskToSetCalendar();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${'error'.tr()}: $e'),
               backgroundColor: Colors.red));
     }
+  }
+
+  // ── Odhlásenie zo záujmu (dopyt bez cenovej ponuky) ────────────────────────
+  Future<void> _withdrawInterest(ServiceRequest r) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('interestWithdraw_title'.tr()),
+        content: Text('interestWithdraw_confirm'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('interestWithdraw_btn'.tr(),
+                  style: const TextStyle(color: Colors.red))),
+        ]));
+    if (ok != true) return;
+    try {
+      await ServiceRequestService.withdrawInterest(
+          requestId: r.id, craftsmanId: uid);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('interestWithdraw_snack'.tr()),
+          backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'),
+          backgroundColor: Colors.red));
+    }
+  }
+
+  // ── Pripomenutie kalendára ─────────────────────────────────────────────────
+  // Zákazku (aj z cenovej ponuky) možno vytvoriť len na voľný termín, takže
+  // remeselník bez kalendára nemôže byť objednaný. Po prejavení záujmu/ponuke
+  // ho na to upozorníme — ale len ak nemá žiadne voľné termíny v budúcnosti.
+  Future<bool> _hasFutureSlots(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('craftsmen').doc(uid)
+          .collection('availability').doc('slots').get();
+      if (!doc.exists) return false;
+      final now = DateTime.now();
+      final today = '${now.year}-${now.month.toString().padLeft(2, '0')}'
+          '-${now.day.toString().padLeft(2, '0')}';
+      final re = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+      for (final e in (doc.data() ?? {}).entries) {
+        if (!re.hasMatch(e.key) || e.key.compareTo(today) < 0) continue;
+        if (e.value is List && (e.value as List).isNotEmpty) return true;
+      }
+      return false;
+    } catch (_) {
+      return true; // pri chybe radšej nič nezobrazuj
+    }
+  }
+
+  Future<void> _maybeAskToSetCalendar() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !mounted) return;
+    if (await _hasFutureSlots(uid) || !mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('interestCal_title'.tr()),
+        content: Text('interestCal_desc'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('interestCal_later'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('interestCal_btn'.tr(),
+                  style: const TextStyle(fontWeight: FontWeight.bold))),
+        ]));
+    if (go == true && mounted) {
+      Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const CraftsmanCalendarScreen()));
+    }
+  }
+
+  // ── Cenová ponuka ──────────────────────────────────────────────────────────
+  Future<void> _openQuoteSheet(ServiceRequest r, Quote? existing) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (!await BillingProfileScreen.ensureReady(context, 'craftsman')) return;
+    if (!mounted) return;
+
+    final craftsmanDoc = await FirebaseFirestore.instance
+        .collection('craftsmen').doc(user.uid).get();
+    final name = (craftsmanDoc.data()?['name'] as String?) ?? user.email ?? '';
+    if (!mounted) return;
+
+    final quote = await showModalBottomSheet<Quote>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _QuoteSheet(
+          request: r, existing: existing,
+          craftsmanId: user.uid, craftsmanName: name),
+    );
+    if (quote == null || !mounted) return;
+
+    try {
+      await ServiceRequestService.submitQuote(requestId: r.id, quote: quote);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('quote_sent_snack'.tr()),
+          backgroundColor: Colors.green));
+      await _maybeAskToSetCalendar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'),
+          backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _withdrawQuote(ServiceRequest r) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text('quote_withdraw_confirm'.tr()),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('quote_withdraw'.tr())),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ServiceRequestService.withdrawQuote(
+          requestId: r.id, craftsmanId: uid);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('quote_withdrawn_snack'.tr()),
+          backgroundColor: Colors.orange));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'),
+          backgroundColor: Colors.red));
+    }
+  }
+
+  String _eur(double v) => '${v.toStringAsFixed(2)} €';
+
+  Widget _buildQuoteAction(
+      ServiceRequest r, bool sent, String? customerReply) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+
+    // Termín uplynul a ponuka nebola odoslaná.
+    if (!sent && r.quoteExpired) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12)),
+        child: Center(child: Text('quote_deadline_passed'.tr(),
+            style: TextStyle(fontSize: 12.5,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600))));
+    }
+
+    if (!sent) {
+      return GestureDetector(
+        onTap: () => _openQuoteSheet(r, null),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [_kDeep, _kPrimary],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(
+              color: _kPrimary.withOpacity(0.3),
+              blurRadius: 6, offset: const Offset(0, 3))]),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.request_quote_outlined,
+                size: 15, color: Colors.white),
+            const SizedBox(width: 8),
+            Text('quote_send'.tr(),
+                style: const TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.bold, fontSize: 13)),
+          ])));
+    }
+
+    return StreamBuilder<Quote?>(
+      stream: ServiceRequestService.watchMyQuote(r.id, uid),
+      builder: (ctx, snap) {
+        final q = snap.data;
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.shade200)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.check_circle_rounded,
+                    size: 15, color: Colors.green.shade700),
+                const SizedBox(width: 6),
+                Text('quote_sent'.tr(),
+                    style: TextStyle(fontSize: 12.5,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w700)),
+              ]),
+              if (q != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${'quote_labor_short'.tr()} ${_eur(q.labor)}'
+                  '${q.material > 0 ? ' + ${'quote_material_short'.tr()} ${_eur(q.material)}' : ''}'
+                  ' = ${_eur(q.craftsmanNet)} ${'quote_without_vat'.tr()}',
+                  style: TextStyle(fontSize: 12.5,
+                      color: Colors.green.shade800, height: 1.4)),
+              ],
+            ])),
+          const SizedBox(height: 8),
+          Row(children: [
+            if (!r.quoteExpired && q != null)
+              Expanded(child: OutlinedButton.icon(
+                onPressed: () => _openQuoteSheet(r, q),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: Text('quote_edit'.tr()))),
+            if (!r.quoteExpired && q != null) const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(
+              onPressed: () => _withdrawQuote(r),
+              icon: const Icon(Icons.undo, size: 16),
+              label: Text('quote_withdraw'.tr()))),
+          ]),
+          if (customerReply != null && customerReply.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _kPrimary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kPrimary.withOpacity(0.2))),
+              child: Text('${'customerReplyLabel'.tr()}: $customerReply',
+                  style: const TextStyle(fontSize: 12.5,
+                      color: _kPrimary, height: 1.4))),
+          ],
+        ]);
+      },
+    );
   }
 
   @override
@@ -433,6 +690,11 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                     'amount': r.budget!.toStringAsFixed(0),
                   })),
             _row(Icons.schedule_outlined, _timeframeLabel(r.timeframe)),
+            if (r.quoteRequired)
+              _row(Icons.request_quote_outlined,
+                  r.quoteDeadline == null
+                      ? 'quote_required_chip'.tr()
+                      : '${'quote_required_chip'.tr()} · ${'quote_deadline_until'.tr(namedArgs: {'date': formatQuoteDate(r.quoteDeadline!)})}'),
 
             if (r.photoUrls.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -487,7 +749,9 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                 ])),
               const SizedBox(height: 8),
               // Tlačidlo záujmu
-              alreadyInterested
+              r.quoteRequired
+                  ? _buildQuoteAction(r, alreadyInterested, customerReply)
+                  : alreadyInterested
                   ? Column(children: [
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -505,6 +769,24 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                                   color: Colors.green.shade700,
                                   fontWeight: FontWeight.w600)),
                         ])),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => _withdrawInterest(r),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.red.shade200)),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.close_rounded, size: 15, color: Colors.red.shade400),
+                            const SizedBox(width: 6),
+                            Text('interestWithdraw_btn'.tr(),
+                                style: TextStyle(fontSize: 12,
+                                    color: Colors.red.shade400,
+                                    fontWeight: FontWeight.w600)),
+                          ]))),
                       if (customerReply != null && customerReply.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Container(
@@ -590,5 +872,213 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
     };
     final key = map[tf];
     return key != null ? key.tr() : tf;
+  }
+}
+
+
+// ── Formulár cenovej ponuky (bottom sheet) ──────────────────────────────────
+class _QuoteSheet extends StatefulWidget {
+  final ServiceRequest request;
+  final Quote? existing;
+  final String craftsmanId;
+  final String craftsmanName;
+  const _QuoteSheet({
+    required this.request,
+    required this.existing,
+    required this.craftsmanId,
+    required this.craftsmanName,
+  });
+
+  @override
+  State<_QuoteSheet> createState() => _QuoteSheetState();
+}
+
+class _QuoteSheetState extends State<_QuoteSheet> {
+  final _form = GlobalKey<FormState>();
+  late final TextEditingController _labor;
+  late final TextEditingController _material;
+  late final TextEditingController _materialNote;
+  late final TextEditingController _duration;
+  late final TextEditingController _note;
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _labor        = TextEditingController(text: e != null ? _fmt(e.labor) : '');
+    _material     = TextEditingController(
+        text: e != null && e.material > 0 ? _fmt(e.material) : '');
+    _materialNote = TextEditingController(text: e?.materialNote ?? '');
+    _duration     = TextEditingController(text: e?.duration ?? '');
+    _note         = TextEditingController(text: e?.note ?? '');
+  }
+
+  @override
+  void dispose() {
+    _labor.dispose();
+    _material.dispose();
+    _materialNote.dispose();
+    _duration.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  double _num(String s) =>
+      double.tryParse(s.trim().replaceAll(',', '.')) ?? 0;
+
+  String? _opt(TextEditingController c) {
+    final t = c.text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  String? _numValidator(String? v, {bool required = false}) {
+    final t = (v ?? '').trim();
+    if (t.isEmpty) return required ? 'quote_error_labor'.tr() : null;
+    final n = double.tryParse(t.replaceAll(',', '.'));
+    if (n == null || n < 0 || n > 1000000) return 'quote_error_number'.tr();
+    if (required && n <= 0) return 'quote_error_labor'.tr();
+    return null;
+  }
+
+  Quote _current() => Quote(
+        craftsmanId: widget.craftsmanId,
+        craftsmanName: widget.craftsmanName,
+        labor: _num(_labor.text),
+        material: _num(_material.text),
+        materialNote: _opt(_materialNote),
+        duration: _opt(_duration),
+        note: _opt(_note),
+      );
+
+  void _submit() {
+    if (!_form.currentState!.validate()) return;
+    Navigator.pop(context, _current());
+  }
+
+  InputDecoration _dec(String label) => InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade200)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade200)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _kPrimary, width: 2)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _current();
+    final numKb =
+        const TextInputType.numberWithOptions(decimal: true);
+    return Container(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Form(
+          key: _form,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 16),
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2))),
+            Text('quote_sheet_title'.tr(),
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('quote_sheet_subtitle'.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13,
+                    color: Colors.grey.shade500, height: 1.5)),
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _labor,
+              keyboardType: numKb,
+              onChanged: (_) => setState(() {}),
+              validator: (v) => _numValidator(v, required: true),
+              decoration: _dec('quote_labor'.tr())),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _material,
+              keyboardType: numKb,
+              onChanged: (_) => setState(() {}),
+              validator: _numValidator,
+              decoration: _dec('quote_material'.tr())),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _materialNote,
+              maxLength: 200, maxLines: 2,
+              decoration: _dec('quote_material_note'.tr())),
+            const SizedBox(height: 4),
+            TextFormField(
+              controller: _duration,
+              maxLength: 100,
+              decoration: _dec('quote_duration'.tr())),
+            const SizedBox(height: 4),
+            TextFormField(
+              controller: _note,
+              maxLength: 300, maxLines: 3,
+              decoration: _dec('quote_note'.tr())),
+            const SizedBox(height: 12),
+
+            // Súhrn: čo bude vidieť zákazník
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                  color: _kBg, borderRadius: BorderRadius.circular(14)),
+              child: Column(children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('quote_total_net'.tr(),
+                      style: TextStyle(color: Colors.grey.shade700)),
+                  Text('${q.craftsmanNet.toStringAsFixed(2)} €',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ]),
+                const SizedBox(height: 6),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('${'quote_customer_sees'.tr()}${Pricing.vatSuffix}',
+                      style: TextStyle(color: Colors.grey.shade700)),
+                  Text('${q.customerGross.toStringAsFixed(2)} €',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, color: _kPrimary)),
+                ]),
+              ])),
+            const SizedBox(height: 16),
+
+            Row(children: [
+              Expanded(child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('cancel'.tr()))),
+              const SizedBox(width: 12),
+              Expanded(flex: 2, child: GestureDetector(
+                onTap: _submit,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [_kDeep, _kPrimary],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: Text('quote_submit'.tr(),
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.bold, fontSize: 15)))))),
+            ]),
+          ]),
+        ),
+      ),
+    );
   }
 }

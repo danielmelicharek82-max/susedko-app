@@ -43,6 +43,9 @@ dependencies:
   share_plus: ^12.0.1
   url_launcher: ^6.1.10
 
+  # ─── HTTP (geokódovanie adries dopytov) ────────────────
+  http: ^1.2.2
+
   # ─── State management ──────────────────────────────────
   provider: ^6.0.7
 

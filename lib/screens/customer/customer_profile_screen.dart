@@ -1,6 +1,7 @@
 // lib/screens/customer/customer_profile_screen.dart
 
 import 'package:flutter/material.dart';
+import '../auth/billing_profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -374,6 +375,10 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             style: const TextStyle(color: Colors.white,
                                 fontWeight: FontWeight.bold, fontSize: 15)),
                       ]))),
+            const SizedBox(height: 12),
+
+            // ── Fakturačné údaje ─────────────────────────────────────────────
+            const BillingProfileTile(role: 'customer'),
             const SizedBox(height: 12),
 
             // ── About app ──────────────────────────────────────────────────

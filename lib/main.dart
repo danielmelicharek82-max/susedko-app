@@ -11,6 +11,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
+import 'utils/pricing.dart';
 
 
 // ─── Screens ─────────────────────────────────────────────────────────────────
@@ -18,6 +19,8 @@ import 'screens/login_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/review_screen.dart';
 import 'screens/role_selection_screen.dart';
+import 'screens/auth/billing_profile_screen.dart';
+import 'screens/shared/issued_invoices_screen.dart';
 
 import 'screens/customer/customer_home.dart';
 import 'screens/customer/customer_craftsmen.dart';
@@ -103,6 +106,10 @@ String? _buildPayload(Map<String, dynamic> data) {
 
 void _handleNotificationTap(String? payload) {
   if (payload == null) return;
+  if (payload == 'issued_invoices') {
+    navigatorKey.currentState?.pushNamed('/issued_invoices');
+    return;
+  }
   if (payload.startsWith('weekly_invoice:')) {
     navigatorKey.currentState?.pushNamed('/customer_work_orders');
     return;
@@ -243,12 +250,17 @@ class _HomieBootstrapState extends State<HomieBootstrap> {
           'work_orders_channel', 'Objednávky práce',
           description: 'Notifikácie o objednávkach a platbách',
           importance: Importance.max);
+      const invoicesChannel = AndroidNotificationChannel(
+          'invoices_channel', 'Faktúry',
+          description: 'Notifikácie o súhrnných faktúrach',
+          importance: Importance.max);
 
       for (final channel in [
         bookingsChannel,
         requestsChannel,
         chatChannel,
         workOrdersChannel,
+        invoicesChannel,
       ]) {
         await flutterLocalNotificationsPlugin
             .resolvePlatformSpecificImplementation<
@@ -270,6 +282,14 @@ class _HomieBootstrapState extends State<HomieBootstrap> {
         await Stripe.instance.applySettings();
       } catch (e) {
         debugPrint('Stripe applySettings: $e');
+      }
+
+      // Pravidlá ceny (prirážka, DPH, zobrazenie cien s DPH) z config/pricing.
+      // Pri chybe alebo timeoute ostanú predvolené hodnoty.
+      try {
+        await Pricing.load().timeout(const Duration(seconds: 4));
+      } catch (e) {
+        debugPrint('Pricing.load: $e');
       }
 
       final systemLocale =
@@ -488,6 +508,7 @@ class _HomieAppState extends State<HomieApp> {
         '/customer_profile':      (_) => const CustomerProfileScreen(),
         '/customer_work_orders':  (_) => const CustomerWorkOrdersScreen(),
         '/customer_requests':     (_) => const CustomerRequestsScreen(),
+        '/billing_profile_customer': (_) => const BillingProfileScreen(role: 'customer'),
 
         // ── Craftsman ─────────────────────────────────────────────────────
         '/craftsman_work_orders': (_) => const CraftsmanWorkOrdersScreen(),
@@ -495,6 +516,10 @@ class _HomieAppState extends State<HomieApp> {
         '/craftsman_calendar':  (_) => const CraftsmanCalendarScreen(),
         '/craftsman_portfolio': (_) => const CraftsmanPortfolioScreen(),
         '/craftsman_profile':   (_) => const CraftsmanProfileScreen(),
+        '/billing_profile_craftsman': (_) => const BillingProfileScreen(role: 'craftsman'),
+
+        // ── Spoločné (zákazník aj remeselník) ─────────────────────────────
+        '/issued_invoices':     (_) => const IssuedInvoicesScreen(),
 
         // ── Admin ─────────────────────────────────────────────────────────
         '/admin_home':      (_) => AdminHomeScreen(),

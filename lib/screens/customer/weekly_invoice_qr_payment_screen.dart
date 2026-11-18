@@ -55,7 +55,7 @@ class _WeeklyInvoiceQrPaymentScreenState
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final total = widget.invoice.totalAmount;
+    final total = widget.invoice.totalWithVat;
 
     setState(() {
       _loading = true;
@@ -168,7 +168,7 @@ class _WeeklyInvoiceQrPaymentScreenState
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.invoice.totalAmount;
+    final total = widget.invoice.totalWithVat;
     final craftsmanName =
         widget.invoice.craftsmanSnapshot?['name'] ?? 'Remeselník';
 
