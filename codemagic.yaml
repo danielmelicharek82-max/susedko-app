@@ -33,10 +33,12 @@ workflows:
 
           curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
           curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer
+          curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer
           curl -sO https://www.apple.com/appleca/AppleIncRootCertificate.cer
 
           security import AppleWWDRCAG3.cer -k build.keychain -A
           security import AppleWWDRCAG4.cer -k build.keychain -A
+          security import AppleWWDRCAG6.cer -k build.keychain -A
           security import AppleIncRootCertificate.cer -k build.keychain -A
 
           security set-key-partition-list \
@@ -47,7 +49,11 @@ workflows:
 
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
 
+          echo "=== Valid identities ==="
           security find-identity -v -p codesigning build.keychain
+
+          echo "=== All identities (incl. not trusted) ==="
+          security find-identity -p codesigning build.keychain
 
       - name: Install Provisioning Profile
         script: |
@@ -113,6 +119,9 @@ workflows:
           echo "=== All identities ==="
           security find-identity -v -p codesigning
 
+          echo "=== Identities incl. not trusted ==="
+          security find-identity -p codesigning build.keychain
+
           echo "=== Provisioning Profiles ==="
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "No profiles found"
 
@@ -157,3 +166,117 @@ workflows:
 
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
+
+  ios-signing-debug:
+    name: iOS Signing Debug (rychla diagnostika, ~1 min)
+    max_build_duration: 15
+
+    environment:
+      xcode: latest
+      groups:
+        - DMX
+
+    scripts:
+      - name: Signing diagnostics
+        script: |
+          set +e
+
+          echo "=== Systém ==="
+          sw_vers
+          xcodebuild -version
+          whoami
+          echo "HOME: $HOME"
+
+          echo "=== Premenné (len dĺžky, nie hodnoty) ==="
+          echo "CERTIFICATE_PRIVATE_KEY: ${#CERTIFICATE_PRIVATE_KEY}"
+          echo "CERTIFICATE_PASSWORD: ${#CERTIFICATE_PASSWORD}"
+          echo "PROVISIONING_PROFILE: ${#PROVISIONING_PROFILE}"
+
+          echo "=== Kľúčenka ==="
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          ls -l "$HOME/Library/Keychains/"
+
+          echo "=== P12 súbor ==="
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > /tmp/cert.p12
+          ls -l /tmp/cert.p12
+          file /tmp/cert.p12
+
+          echo "=== Import P12 ==="
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -f pkcs12 \
+            -A
+          echo "Import exit code: $?"
+
+          echo "=== Apple WWDR certifikáty ==="
+          for G in G3 G4 G5 G6 G7 G8; do
+            if curl -sf -o AppleWWDRCA$G.cer https://www.apple.com/certificateauthority/AppleWWDRCA$G.cer; then
+              security import AppleWWDRCA$G.cer -k build.keychain -A > /dev/null 2>&1
+              echo "$G: stiahnuté a importované (exit $?)"
+            else
+              echo "$G: na serveri neexistuje"
+            fi
+          done
+          curl -sO https://www.apple.com/appleca/AppleIncRootCertificate.cer
+          security import AppleIncRootCertificate.cer -k build.keychain -A > /dev/null 2>&1
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "build" \
+            build.keychain > /dev/null 2>&1
+
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+
+          echo "=== Certifikáty v kľúčenke (SHA-1 a názov) ==="
+          security find-certificate -a -Z build.keychain | grep -E "SHA-1 hash|\"labl\""
+
+          echo "=== Detail každého certifikátu (vydavateľ a platnosť) ==="
+          security find-certificate -a -p build.keychain > /tmp/all.pem
+          awk '/BEGIN CERTIFICATE/{n++} {print > "/tmp/c-" n ".pem"}' /tmp/all.pem
+          for f in /tmp/c-*.pem; do
+            echo "--- $f"
+            openssl x509 -in "$f" -noout -subject -issuer -enddate
+          done
+
+          echo "=== Overenie reťaze dôvery pre kód-podpis ==="
+          for f in /tmp/c-*.pem; do
+            if openssl x509 -in "$f" -noout -subject | grep -q "Distribution"; then
+              echo "--- $f"
+              security verify-cert -c "$f" -p codeSign -k build.keychain
+              echo "verify exit code: $?"
+            fi
+          done
+
+          echo "=== Identity (platné) ==="
+          security find-identity -v -p codesigning build.keychain
+
+          echo "=== Identity (všetky, aj nedôveryhodné) ==="
+          security find-identity -p codesigning build.keychain
+
+          echo "=== Provisioning profil ==="
+          echo "$PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          security cms -D -i /tmp/profile.mobileprovision > /tmp/profile.plist
+          python3 - <<'PY'
+          import plistlib, hashlib, subprocess, re
+          p = plistlib.load(open('/tmp/profile.plist', 'rb'))
+          print('Name:', p.get('Name'))
+          print('Team:', p.get('TeamIdentifier'))
+          print('AppID:', p['Entitlements'].get('application-identifier'))
+          print('Expires:', p.get('ExpirationDate'))
+          print('Ma zariadenia (ad-hoc/dev):', 'ProvisionedDevices' in p)
+          print('Entitlements:', sorted(p['Entitlements'].keys()))
+          prof = set(hashlib.sha1(c).hexdigest().upper() for c in p.get('DeveloperCertificates', []))
+          out = subprocess.run(['security', 'find-certificate', '-a', '-Z', 'build.keychain'], capture_output=True, text=True).stdout
+          kc = set(re.findall(r'SHA-1 hash: ([0-9A-F]+)', out))
+          print('Certifikáty v profile (SHA-1):', sorted(prof))
+          print('Certifikát z P12 je v profile:', sorted(kc & prof) if (kc & prof) else 'NIE - profil nepozná certifikát z P12')
+          PY
+
+          echo "=== Hotovo ==="
