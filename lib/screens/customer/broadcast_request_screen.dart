@@ -119,13 +119,16 @@ class _BroadcastRequestScreenState
     );
     if (res.isEmpty) return;
     var tooBig = false;
-    setState(() {
-      for (final f in res.take(left)) {
-        if (f.path == null) continue;
-        if (f.size > _kMaxDocBytes) { tooBig = true; continue; }
-        _newDocs.add(f);
-      }
-    });
+    final accepted = <PlatformFile>[];
+    for (final f in res.take(left)) {
+      final path = f.path;
+      if (path == null) continue;
+      final size = await File(path).length();
+      if (size > _kMaxDocBytes) { tooBig = true; continue; }
+      accepted.add(f);
+    }
+    if (!mounted) return;
+    setState(() => _newDocs.addAll(accepted));
     if (tooBig) _snack('inspection_docs_toobig'.tr());
   }
 
