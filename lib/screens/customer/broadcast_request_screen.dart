@@ -117,10 +117,10 @@ class _BroadcastRequestScreenState
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
     );
-    if (res == null) return;
+    if (res.isEmpty) return;
     var tooBig = false;
     setState(() {
-      for (final f in res.files.take(left)) {
+      for (final f in res.take(left)) {
         if (f.path == null) continue;
         if (f.size > _kMaxDocBytes) { tooBig = true; continue; }
         _newDocs.add(f);
