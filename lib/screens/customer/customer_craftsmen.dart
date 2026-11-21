@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../models/craftsman.dart';
 import '../../models/service_request.dart';
 import '../../providers/geo_provider.dart';
@@ -527,6 +529,12 @@ class _BroadcastCard extends StatelessWidget {
               ],
             ]),
 
+            // „Stále aktuálne“ — len keď systém poslal kontrolu a zákazník ešte nepotvrdil
+            if (isOpen && _needsStillActiveConfirm(r)) ...[
+              const SizedBox(height: 10),
+              _StillActiveBanner(requestId: r.id),
+            ],
+
             const SizedBox(height: 10),
             const Divider(height: 1, color: Color(0xFFEFF2F7)),
             const SizedBox(height: 10),
@@ -651,11 +659,91 @@ class _BroadcastCard extends StatelessWidget {
       '1_3_days':   'timeframe_1_3_days',
       '1_2_weeks':  'timeframe_1_2_weeks',
       '1_3_months': 'timeframe_1_3_months',
+      '3_6_months': 'timeframe_3_6_months',
+      'over_6_months': 'timeframe_over_6_months',
       'no_rush':    'timeframe_no_rush',
     };
     final key = map[tf];
     return key != null ? key.tr() : tf;
   }
+}
+
+/// Systém poslal kontrolu „je dopyt ešte aktuálny?“ (staleCheck1At/2At) a zákazník
+/// ju zatiaľ nepotvrdil (keepAliveAt) ani na dopyt medzitým nepribudol nový záujem.
+bool _needsStillActiveConfirm(ServiceRequest r) {
+  DateTime? ts(dynamic v) => v is Timestamp ? v.toDate() : null;
+  final c1 = ts(r.rawData['staleCheck1At']);
+  final c2 = ts(r.rawData['staleCheck2At']);
+  DateTime? check = c1;
+  if (c2 != null && (check == null || c2.isAfter(check))) check = c2;
+  if (check == null) return false;
+  final ka = ts(r.rawData['keepAliveAt']);
+  if (ka != null && !ka.isBefore(check)) return false;
+  for (final e in r.rawData.entries) {
+    if (e.key.startsWith('interest_') && e.value is Map) {
+      final t = ts((e.value as Map)['timestamp']);
+      if (t != null && t.isAfter(check)) return false;
+    }
+  }
+  return true;
+}
+
+class _StillActiveBanner extends StatefulWidget {
+  final String requestId;
+  const _StillActiveBanner({required this.requestId});
+  @override
+  State<_StillActiveBanner> createState() => _StillActiveBannerState();
+}
+
+class _StillActiveBannerState extends State<_StillActiveBanner> {
+  bool _busy = false;
+
+  Future<void> _confirm() async {
+    setState(() => _busy = true);
+    try {
+      await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('confirmRequestStillActive')
+          .call({'requestId': widget.requestId});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('requestStillActive_ok'.tr()),
+          backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('requestStillActive_err'.tr()),
+            backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+    decoration: BoxDecoration(
+      color: Colors.green.shade50,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.green.shade200)),
+    child: Row(children: [
+      Expanded(child: Text('requestStillActive_q'.tr(),
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+              color: Colors.green.shade800))),
+      const SizedBox(width: 8),
+      TextButton(
+        onPressed: _busy ? null : _confirm,
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.green.shade800,
+          backgroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: Colors.green.shade300))),
+        child: _busy
+            ? const SizedBox(width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : Text('requestStillActive_btn'.tr(),
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold))),
+    ]));
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────

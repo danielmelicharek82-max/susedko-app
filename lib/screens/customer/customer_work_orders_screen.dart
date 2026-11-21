@@ -345,22 +345,63 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             ],
 
             // ── PEVNÁ CENA: záloha na materiál ────────────────────────
+            // Záloha sa platí hneď po prijatí ponuky (stav pending); pri termíne
+            // ďalej ako 14 dní až od depositPayableFrom (vtedy len informácia).
             if (o.isFixed && o.depositDue &&
-                (o.status == WorkOrderStatus.confirmed ||
+                (o.status == WorkOrderStatus.pending ||
+                 o.status == WorkOrderStatus.confirmed ||
                  o.status == WorkOrderStatus.inProgress)) ...[
               const SizedBox(height: 10),
-              _alertBox(
-                color: Colors.orange,
-                icon: Icons.savings_outlined,
-                title: 'order_pay_deposit_title'.tr(),
-                text: 'order_pay_deposit_desc'.tr()),
-              const SizedBox(height: 8),
-              _gradientBtn(
-                label: 'order_pay_deposit_btn'.tr(namedArgs: {
-                  'deposit': o.depositGross.toStringAsFixed(2)}),
-                icon: Icons.payment_outlined,
-                onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => WorkOrderPaymentScreen(order: o)))),
+              if (o.depositPayableNow) ...[
+                _alertBox(
+                  color: Colors.orange,
+                  icon: Icons.savings_outlined,
+                  title: 'order_pay_deposit_title'.tr(),
+                  text: 'order_pay_deposit_desc'.tr()),
+                const SizedBox(height: 8),
+                _gradientBtn(
+                  label: 'order_pay_deposit_btn'.tr(namedArgs: {
+                    'deposit': o.depositGross.toStringAsFixed(2)}),
+                  icon: Icons.payment_outlined,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => WorkOrderPaymentScreen(order: o)))),
+              ] else
+                _alertBox(
+                  color: Colors.blueGrey,
+                  icon: Icons.event_available_outlined,
+                  title: 'order_deposit_later_title'.tr(),
+                  text: 'order_deposit_later_desc'.tr(namedArgs: {
+                    'date': DateFormat('d.M.yyyy').format(o.depositPayableFrom!),
+                    'deposit': o.depositGross.toStringAsFixed(2)})),
+            ],
+
+            // ── PEVNÁ CENA: doklad o nákupe materiálu ─────────────────
+            if (o.isFixed && o.depositPaid &&
+                o.status != WorkOrderStatus.cancelled) ...[
+              const SizedBox(height: 10),
+              if (o.hasMaterialProof) ...[
+                _alertBox(
+                  color: Colors.green,
+                  icon: Icons.receipt_long_outlined,
+                  title: 'order_material_proof_title'.tr(),
+                  text: 'order_material_proof_desc'.tr(namedArgs: {
+                    'amount': o.materialProofAmount.toStringAsFixed(2)})),
+                if (o.materialProofUrl != null) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => launchUrl(Uri.parse(o.materialProofUrl!),
+                          mode: LaunchMode.externalApplication),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: Text('order_material_proof_open'.tr()))),
+                ],
+              ] else
+                _alertBox(
+                  color: Colors.blueGrey,
+                  icon: Icons.hourglass_empty_rounded,
+                  title: 'order_material_wait_title'.tr(),
+                  text: 'order_material_wait_desc'.tr()),
             ],
 
             // ── PEVNÁ CENA: zrušenie zákazky ──────────────────────────
@@ -405,10 +446,11 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
             // ── PEVNÁ CENA: zrušená zákazka — osud zálohy ─────────────
             if (o.isFixed && o.status == WorkOrderStatus.cancelled &&
                 const ['refund_pending_decision', 'refunded', 'kept',
-                       'refund_failed'].contains(o.depositStatus)) ...[
+                       'partially_kept', 'refund_failed'].contains(o.depositStatus)) ...[
               const SizedBox(height: 10),
               _alertBox(
-                color: o.depositStatus == 'kept' || o.depositStatus == 'refund_failed'
+                color: o.depositStatus == 'kept' || o.depositStatus == 'partially_kept' ||
+                        o.depositStatus == 'refund_failed'
                     ? Colors.orange : Colors.green,
                 icon: Icons.savings_outlined,
                 title: 'order_deposit'.tr(),
@@ -416,6 +458,9 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
                   'refund_pending_decision' => 'order_cust_deposit_pending'.tr(),
                   'refunded' => 'order_cust_deposit_refunded'.tr(),
                   'kept' => 'order_cust_deposit_kept'.tr(),
+                  'partially_kept' => 'order_cust_deposit_partial'.tr(namedArgs: {
+                    'kept': o.depositKeptAmount.toStringAsFixed(2),
+                    'refund': o.depositRefundAmount.toStringAsFixed(2)}),
                   _ => 'order_cust_deposit_failed'.tr(),
                 }),
             ],
@@ -1572,9 +1617,13 @@ class _CustomerWorkOrdersScreenState extends State<CustomerWorkOrdersScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('order_cancel_title'.tr()),
-        content: Text(o.depositPaid
-            ? 'order_cancel_customer_paid_desc'.tr()
-            : 'order_cancel_desc'.tr()),
+        content: Text(!o.depositPaid
+            ? 'order_cancel_desc'.tr()
+            : o.hasMaterialProof
+                ? 'order_cancel_customer_proof_desc'.tr(namedArgs: {
+                    'amount': (o.materialProofAmount > o.depositGross
+                        ? o.depositGross : o.materialProofAmount).toStringAsFixed(2)})
+                : 'order_cancel_customer_paid_desc'.tr()),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: Text('cancel'.tr())),

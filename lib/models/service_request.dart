@@ -40,6 +40,16 @@ class ServiceRequest {
   // (práca + materiál). Ponuky sú v subkolekcii quotes (viď Quote).
   final bool quoteRequired;
   final DateTime? quoteDeadline;
+  // Podklad pre ponuku: 'documents' = zákazník priložil podklady (fotky, PDF,
+  // výkaz výmer), 'inspection' = platená obhliadka (viď inspection.dart).
+  // Staršie dopyty bez poľa sa berú ako 'documents'.
+  final String quoteBasis;
+  // Priložené dokumenty (PDF/Excel/...): [{url, name}]. Fotky ostávajú
+  // v photoUrls.
+  final List<Map<String, String>> documentUrls;
+  // Odhad rozsahu pri platbe podľa hodín: under2h | half_day | full_day |
+  // multi_day | unknown (null = nezadané).
+  final String? estimatedScope;
 
   // ── Raw Firestore document data ────────────────────────────────────────
   // toMap()/fromFirestore() only know about the fixed fields above. Dynamic
@@ -79,6 +89,9 @@ class ServiceRequest {
     this.craftsmanReply,
     this.quoteRequired = false,
     this.quoteDeadline,
+    this.quoteBasis = 'documents',
+    this.documentUrls = const [],
+    this.estimatedScope,
     this.rawData = const {},
     this.adminCustomerEmail,
     this.adminCustomerPhone,
@@ -89,6 +102,9 @@ class ServiceRequest {
             : professions;
 
   bool get isBroadcast => type == ServiceRequestType.broadcast;
+
+  /// Cenová ponuka sa robí po platenej obhliadke.
+  bool get quoteByInspection => quoteRequired && quoteBasis == 'inspection';
 
   /// Termín na ponuky uplynul (platí do konca zvoleného dňa).
   bool get quoteExpired {
@@ -123,6 +139,9 @@ class ServiceRequest {
     'quoteRequired':          quoteRequired,
     'quoteDeadline':          quoteDeadline != null
         ? Timestamp.fromDate(quoteDeadline!) : null,
+    'quoteBasis':             quoteRequired ? quoteBasis : null,
+    'documentUrls':           documentUrls,
+    'estimatedScope':         quoteRequired ? null : estimatedScope,
     // adminContacts sú transient — neukladáme ich do Firestore
   };
 
@@ -163,6 +182,17 @@ class ServiceRequest {
       quoteRequired: map['quoteRequired'] == true,
       quoteDeadline: map['quoteDeadline'] is Timestamp
           ? (map['quoteDeadline'] as Timestamp).toDate() : null,
+      quoteBasis: map['quoteBasis'] == 'inspection' ? 'inspection' : 'documents',
+      documentUrls: (map['documentUrls'] is List)
+          ? (map['documentUrls'] as List)
+              .whereType<Map>()
+              .map((m) => {
+                    'url': (m['url'] ?? '').toString(),
+                    'name': (m['name'] ?? '').toString(),
+                  })
+              .toList()
+          : const [],
+      estimatedScope: map['estimatedScope']?.toString(),
       rawData:       map,
     );
   }
@@ -209,6 +239,9 @@ class ServiceRequest {
       craftsmanReply: craftsmanReply ?? this.craftsmanReply,
       quoteRequired: quoteRequired,
       quoteDeadline: quoteDeadline,
+      quoteBasis:    quoteBasis,
+      documentUrls:  documentUrls,
+      estimatedScope: estimatedScope,
       rawData:       rawData,
       // zachovaj admin kontakty
       adminCustomerEmail:  adminCustomerEmail,
@@ -250,6 +283,9 @@ class ServiceRequest {
       craftsmanReply: craftsmanReply,
       quoteRequired: quoteRequired,
       quoteDeadline: quoteDeadline,
+      quoteBasis:    quoteBasis,
+      documentUrls:  documentUrls,
+      estimatedScope: estimatedScope,
       rawData:       rawData,
       adminCustomerEmail:  customerEmail ?? adminCustomerEmail,
       adminCustomerPhone:  customerPhone ?? adminCustomerPhone,

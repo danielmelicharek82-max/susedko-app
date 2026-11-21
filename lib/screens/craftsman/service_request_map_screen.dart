@@ -403,6 +403,7 @@ class _RequestBottomSheet extends StatelessWidget {
     const map = {
       'asap': 'timeframe_asap', '1_3_days': 'timeframe_1_3_days',
       '1_2_weeks': 'timeframe_1_2_weeks', '1_3_months': 'timeframe_1_3_months',
+      '3_6_months': 'timeframe_3_6_months', 'over_6_months': 'timeframe_over_6_months',
       'no_rush': 'timeframe_no_rush',
     };
     final key = map[v];

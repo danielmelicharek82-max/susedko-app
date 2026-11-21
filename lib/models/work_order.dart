@@ -198,9 +198,15 @@ class WorkOrder {
   final double? craftsmanFixedLabor;
   final double? craftsmanFixedMaterial;
   final double depositGross;           // záloha na materiál s DPH
-  // none | due | paid | refunded | refund_pending_decision | kept | refund_failed
+  final double inspectionCredit;       // zaplatená obhliadka odpočítaná z doplatku (€)
+  // none | due | paid | refunded | refund_pending_decision | kept | partially_kept | refund_failed
   final String depositStatus;
   final DateTime? depositPaidAt;
+  final DateTime? depositPayableFrom;  // od kedy možno zálohu zaplatiť (14 dní pred termínom)
+  final double depositKeptAmount;      // suma zálohy, ktorá ostala remeselníkovi po zrušení
+  final double depositRefundAmount;    // suma zálohy vrátená zákazníkovi po zrušení
+  // Doklad o nákupe materiálu {amount, receiptUrl, submittedAt, capped}
+  final Map<String, dynamic>? materialProof;
   // Kontakty druhej strany (server ich zapíše po prijatí zákazky)
   final Map<String, dynamic>? contacts;
 
@@ -247,8 +253,13 @@ class WorkOrder {
     this.craftsmanFixedLabor,
     this.craftsmanFixedMaterial,
     this.depositGross = 0,
+    this.inspectionCredit = 0,
     this.depositStatus = 'none',
     this.depositPaidAt,
+    this.depositPayableFrom,
+    this.depositKeptAmount = 0,
+    this.depositRefundAmount = 0,
+    this.materialProof,
     this.contacts,
   });
 
@@ -260,12 +271,21 @@ class WorkOrder {
   bool get depositSettled => !isFixed || depositStatus != 'due';
   bool get depositNeedsDecision => depositStatus == 'refund_pending_decision';
 
+  /// Záloha je už splatná (pri vzdialenom termíne až 14 dní pred začiatkom).
+  bool get depositPayableNow =>
+      depositPayableFrom == null || !depositPayableFrom!.isAfter(DateTime.now());
+  bool get hasMaterialProof => materialProof != null;
+  double get materialProofAmount =>
+      (materialProof?['amount'] as num?)?.toDouble() ?? 0;
+  String? get materialProofUrl => materialProof?['receiptUrl'] as String?;
+
   /// Doplatok (s DPH) = celkom − zaplatená záloha.
   double? get balanceGross {
     final total = totalWithVat;
     if (total == null) return null;
     final paid = depositStatus == 'paid' ? depositGross : 0;
-    return ((total - paid) * 100).roundToDouble() / 100;
+    final v = ((total - paid - inspectionCredit) * 100).roundToDouble() / 100;
+    return v < 0 ? 0 : v;
   }
 
   /// Kontakt druhej strany (telefón/e-mail) — dostupný po prijatí zákazky.
@@ -461,9 +481,16 @@ class WorkOrder {
       craftsmanFixedLabor:    (map['craftsmanFixedLabor'] as num?)?.toDouble(),
       craftsmanFixedMaterial: (map['craftsmanFixedMaterial'] as num?)?.toDouble(),
       depositGross:  (map['depositGross'] as num?)?.toDouble() ?? 0,
+      inspectionCredit: (map['inspectionCredit'] as num?)?.toDouble() ?? 0,
       depositStatus: (map['depositStatus'] as String?) ?? 'none',
       depositPaidAt: map['depositPaidAt'] is Timestamp
           ? (map['depositPaidAt'] as Timestamp).toDate() : null,
+      depositPayableFrom: map['depositPayableFrom'] is Timestamp
+          ? (map['depositPayableFrom'] as Timestamp).toDate() : null,
+      depositKeptAmount: (map['depositKeptAmount'] as num?)?.toDouble() ?? 0,
+      depositRefundAmount: (map['depositRefundAmount'] as num?)?.toDouble() ?? 0,
+      materialProof: map['materialProof'] is Map
+          ? Map<String, dynamic>.from(map['materialProof']) : null,
       contacts: map['contacts'] is Map
           ? Map<String, dynamic>.from(map['contacts']) : null,
     );
@@ -521,8 +548,11 @@ class WorkOrder {
       fixedDuration: fixedDuration, craftsmanFixedNet: craftsmanFixedNet,
       craftsmanFixedLabor: craftsmanFixedLabor,
       craftsmanFixedMaterial: craftsmanFixedMaterial,
-      depositGross: depositGross, depositStatus: depositStatus,
-      depositPaidAt: depositPaidAt, contacts: contacts,
+      depositGross: depositGross, inspectionCredit: inspectionCredit,
+      depositStatus: depositStatus,
+      depositPaidAt: depositPaidAt, depositPayableFrom: depositPayableFrom,
+      depositKeptAmount: depositKeptAmount, depositRefundAmount: depositRefundAmount,
+      materialProof: materialProof, contacts: contacts,
     );
   }
 }

@@ -23,6 +23,7 @@ class CraftsmanPortfolioScreen extends StatefulWidget {
 
 class _CraftsmanPortfolioScreenState
     extends State<CraftsmanPortfolioScreen> {
+  static const int _kMaxPhotos = 3;
   bool _uploading = false;
   String? get _userId => FirebaseAuth.instance.currentUser?.uid;
 
@@ -37,6 +38,19 @@ class _CraftsmanPortfolioScreenState
   }
 
   Future<void> _addPhoto() async {
+    if (_userId == null) return;
+    // limit: max 3 fotky (kontrola pred vyberom, aby sa zbytocne neotváral výber)
+    try {
+      final cnt = await FirebaseFirestore.instance
+          .collection('craftsmen').doc(_userId)
+          .collection('portfolio').count().get();
+      if ((cnt.count ?? 0) >= _kMaxPhotos) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('portfolioLimit'.tr()),
+                backgroundColor: Colors.orange));
+        return;
+      }
+    } catch (_) {}
     final picker = ImagePicker();
     final picked = await picker.pickImage(
         source: ImageSource.gallery, imageQuality: 85);
@@ -335,7 +349,7 @@ class _CraftsmanPortfolioScreenState
               decoration: BoxDecoration(
                 color: _kPrimary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20)),
-              child: Text('${items.length}',
+              child: Text('${items.length}/$_kMaxPhotos',
                   style: TextStyle(fontSize: 12, color: _kPrimary,
                       fontWeight: FontWeight.bold))),
           ]))),

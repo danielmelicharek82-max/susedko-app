@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:intl/intl.dart';
 import '../../models/service_request.dart';
 import '../../models/craftsman.dart';
 import '../../models/quote.dart';
@@ -11,6 +12,10 @@ import '../../utils/pricing.dart';
 import '../../services/service_request_service.dart';
 import '../auth/craftsman_register_form.dart'; // kProfessionIcons
 import 'create_work_order_screen.dart';
+import 'inspection_payment_screen.dart';
+import '../../models/inspection.dart';
+import '../../services/inspection_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -37,15 +42,96 @@ class _RequestInterestedScreenState
   StreamSubscription<List<Quote>>? _quotesSub;
   bool _sortByPrice = true;
 
+  // Obhliadky (len ak je dopyt s obhliadkou)
+  Map<String, Inspection> _inspections = {};
+  Map<String, InspectionOffer> _offers = {};
+  StreamSubscription<List<Inspection>>? _insSub;
+  StreamSubscription<List<InspectionOffer>>? _offersSub;
+  final Set<String> _busyInspections = {};
+
   @override
   void initState() {
     super.initState();
     _loadInterested();
     if (widget.request.quoteRequired) _listenQuotes();
+    if (widget.request.quoteByInspection) _listenInspections();
+  }
+
+  void _listenInspections() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _insSub = InspectionService.watchForRequest(widget.request.id, uid).listen(
+      (list) {
+        if (!mounted) return;
+        setState(() => _inspections = {for (final i in list) i.craftsmanId: i});
+      },
+      onError: (e) => debugPrint('inspections stream: $e'),
+    );
+    _offersSub = InspectionService.watchOffers(widget.request.id).listen(
+      (list) {
+        if (!mounted) return;
+        final map = {for (final o in list) o.craftsmanId: o};
+        final known = _interested.map((i) => i.craftsman.id).toSet();
+        final needReload = map.keys.any((id) => !known.contains(id));
+        setState(() => _offers = map);
+        if (needReload) _loadInterested();
+      },
+      onError: (e) => debugPrint('offers stream: $e'),
+    );
+  }
+
+  /// Zákazník ešte nemá s týmto remeselníkom aktívnu (zaplatenú) obhliadku.
+  bool _needsInspectionPayment(String craftsmanId) {
+    final i = _inspections[craftsmanId];
+    return i == null || i.status == 'refunded' || i.status == 'awaiting_payment';
+  }
+
+  int get _activeInspections => _inspections.values
+      .where((i) => const ['paid', 'visited', 'confirmed'].contains(i.status))
+      .length;
+
+  Future<void> _runInspectionAction(
+      String id, Future<dynamic> Function() action, String okMsg) async {
+    setState(() => _busyInspections.add(id));
+    try {
+      await action();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(okMsg), backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _busyInspections.remove(id));
+    }
+  }
+
+  Future<void> _cancelInspection(Inspection ins) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('inspection_cancel_title'.tr()),
+        content: Text('inspection_cancel_body'.tr()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('confirm'.tr())),
+        ]));
+    if (ok != true) return;
+    await _runInspectionAction(ins.id, () async {
+      final refunded = await InspectionService.cancel(ins.id);
+      if (!refunded && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('inspection_cancel_late'.tr()),
+            backgroundColor: Colors.orange));
+      }
+    }, 'inspection_cancelled_snack'.tr());
   }
 
   @override
   void dispose() {
+    _insSub?.cancel();
+    _offersSub?.cancel();
     _quotesSub?.cancel();
     super.dispose();
   }
@@ -91,7 +177,9 @@ class _RequestInterestedScreenState
     final seq = ++_loadSeq;
     // Pri dopyte s ponukami berieme aj remeselníkov, ktorí ponuku poslali
     // po otvorení obrazovky (r.interestedCraftsmanIds je len snímka).
-    final ids = <String>{...r.interestedCraftsmanIds, ..._quotes.keys};
+    final ids = <String>{
+      ...r.interestedCraftsmanIds, ..._quotes.keys, ..._offers.keys,
+    };
     if (ids.isEmpty) {
       if (mounted) setState(() => _loading = false);
       return;
@@ -119,6 +207,24 @@ class _RequestInterestedScreenState
   }
 
   Future<void> _selectCraftsman(_CraftsmanInterest interest) async {
+    // Dopyt s obhliadkou: výber = platba obhliadky (kým nie je zaplatená).
+    // Výber je platný až po úspešnej platbe; ostatní záujemcovia sa nemenia.
+    if (widget.request.quoteByInspection &&
+        _needsInspectionPayment(interest.craftsman.id)) {
+      if (_activeInspections >= 3) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('inspection_err_max'.tr()),
+            backgroundColor: Colors.orange));
+        return;
+      }
+      await Navigator.push<bool>(context, MaterialPageRoute(
+          builder: (_) => InspectionPaymentScreen(
+              requestId: widget.request.id,
+              craftsmanId: interest.craftsman.id,
+              craftsmanName: interest.craftsman.name,
+              proposedDates: _offers[interest.craftsman.id]?.proposedDates)));
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Dialog(
@@ -535,6 +641,91 @@ class _RequestInterestedScreenState
           color: bold ? _kPrimary : Colors.grey.shade800)),
     ]));
 
+  /// Tlačidlo "Vybrať" sa zobrazí: pri bežnom dopyte vždy; pri obhliadke buď
+  /// keď ešte nie je zaplatená, alebo keď je potvrdená a ponuka je doručená.
+  bool _canSelect(_CraftsmanInterest i) {
+    if (!widget.request.quoteByInspection) return true;
+    final id = i.craftsman.id;
+    if (_needsInspectionPayment(id)) return true;
+    return _inspections[id]?.status == 'confirmed' && _quotes.containsKey(id);
+  }
+
+  String _selectLabel(_CraftsmanInterest i) {
+    if (widget.request.quoteByInspection &&
+        _needsInspectionPayment(i.craftsman.id)) {
+      return 'inspection_select_btn'.tr(
+          namedArgs: {'fee': InspectionService.defaultFee.toStringAsFixed(0)});
+    }
+    return 'selectAndOrder'.tr();
+  }
+
+  Widget _buildInspectionBlock(_CraftsmanInterest interest) {
+    final id = interest.craftsman.id;
+    final ins = _inspections[id];
+    final offer = _offers[id];
+    String fmt(DateTime d) => DateFormat('d.M.y HH:mm').format(d);
+    Widget box(Color c, IconData icon, String text, [List<Widget> actions = const []]) =>
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: c.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.withOpacity(0.3))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(icon, size: 16, color: c),
+              const SizedBox(width: 8),
+              Expanded(child: Text(text,
+                  style: const TextStyle(fontSize: 12.5, height: 1.4))),
+            ]),
+            if (actions.isNotEmpty) ...[const SizedBox(height: 8), ...actions],
+          ]));
+    final busy = ins != null && _busyInspections.contains(ins.id);
+
+    if (ins == null || ins.status == 'awaiting_payment') {
+      final dates = (offer?.proposedDates ?? '').isEmpty ? '' :
+          '\n${'inspection_proposed_dates'.tr()}: ${offer!.proposedDates}';
+      return box(_kPrimary, Icons.home_repair_service_outlined,
+          '${'inspection_wants_visit'.tr()}$dates');
+    }
+    switch (ins.status) {
+      case 'paid':
+        return box(_kPrimary, Icons.event_available_outlined,
+            ins.visitAt == null
+                ? 'inspection_paid_waiting_date'.tr()
+                : '${'inspection_visit_at'.tr()}: ${fmt(ins.visitAt!)}',
+            [OutlinedButton(
+                onPressed: busy ? null : () => _cancelInspection(ins),
+                child: Text('inspection_cancel_btn'.tr()))]);
+      case 'visited':
+        return box(Colors.orange, Icons.fact_check_outlined,
+            'inspection_visited_confirm'.tr(),
+            [ElevatedButton(
+                onPressed: busy ? null : () => _runInspectionAction(ins.id,
+                    () => InspectionService.confirmDone(ins.id),
+                    'inspection_confirmed_snack'.tr()),
+                child: Text('inspection_confirm_btn'.tr()))]);
+      case 'confirmed':
+        if (ins.lateCancelled) {
+          return box(Colors.grey, Icons.cancel_outlined,
+              'inspection_cancel_late'.tr());
+        }
+        return box(Colors.green, Icons.check_circle_outline,
+            _quotes.containsKey(id)
+                ? 'inspection_quote_ready'.tr()
+                : '${'inspection_waiting_quote'.tr()}${ins.quoteDueAt != null ? ' (${DateFormat('d.M.y').format(ins.quoteDueAt!)})' : ''}');
+      case 'quote_accepted':
+        return box(Colors.green, Icons.check_circle_outline,
+            'inspection_credited'.tr());
+      case 'refunded':
+        return box(Colors.grey, Icons.undo_outlined,
+            'inspection_refunded'.tr());
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildQuoteBlock(_CraftsmanInterest interest) {
     final q = _quotes[interest.craftsman.id];
     if (q == null) {
@@ -771,8 +962,16 @@ class _RequestInterestedScreenState
               const SizedBox(height: 10),
             ],
 
+            // Obhliadka (stav, potvrdenie, zrušenie)
+            if (widget.request.quoteByInspection)
+              _buildInspectionBlock(interest),
+
             // Cenová ponuka
-            if (widget.request.quoteRequired) _buildQuoteBlock(interest),
+            if (widget.request.quoteRequired &&
+                (!widget.request.quoteByInspection ||
+                    _inspections[interest.craftsman.id]?.status == 'confirmed' ||
+                    _quotes.containsKey(interest.craftsman.id)))
+              _buildQuoteBlock(interest),
 
             // Customer's reply (already sent)
             if (interest.customerReply != null &&
@@ -855,6 +1054,7 @@ class _RequestInterestedScreenState
                                   fontWeight: FontWeight.w600, fontSize: 13))),
                       ),
                     ])))),
+              if (_canSelect(interest)) ...[
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,
@@ -880,12 +1080,13 @@ class _RequestInterestedScreenState
                       Flexible(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: Text('selectAndOrder'.tr(),
+                          child: Text(_selectLabel(interest),
                               maxLines: 1,
                               style: const TextStyle(color: Colors.white,
                                   fontWeight: FontWeight.bold, fontSize: 14))),
                       ),
                     ])))),
+              ],
             ]),
             const SizedBox(height: 16),
           ])),

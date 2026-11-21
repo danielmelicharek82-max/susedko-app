@@ -6,6 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/work_order.dart';
 import '../../services/work_order_service.dart';
 import '../chat_screen.dart';
@@ -368,6 +371,7 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
             if (o.isFixed) _fixedPriceBox(o),
             if (o.isFixed && o.contacts != null && o.status != WorkOrderStatus.cancelled)
               _contactBox(o),
+            if (o.isFixed) _materialProofSection(o),
 
             // Hodiny box
             if (o.loggedHours != null) ...[
@@ -684,6 +688,196 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
     }
   }
 
+  // ── Pevná cena: doklad o nákupe materiálu ─────────────────────────────────
+  // Záloha zaplatená → remeselník nakúpi materiál a nahrá doklad (suma + fotka).
+  // Zákazník ho uvidí; pri zrušení zákazníkom ostane remeselníkovi suma z dokladu.
+  Widget _materialProofSection(WorkOrder o) {
+    if (o.status == WorkOrderStatus.cancelled ||
+        o.status == WorkOrderStatus.paid ||
+        o.status == WorkOrderStatus.completed) {
+      return const SizedBox.shrink();
+    }
+    if (o.depositDue) {
+      // Záloha ešte nezaplatená → zatiaľ nenakupovať (v stave "confirmed" to
+      // ukazuje samostatný box pri tlačidlách, preto tu len pre "pending").
+      if (o.status != WorkOrderStatus.pending) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: _infoBanner(
+          icon: Icons.hourglass_top_rounded,
+          color: Colors.orange,
+          title: 'order_wait_deposit_title'.tr(),
+          text: 'order_wait_deposit_desc'.tr(namedArgs: {
+            'deposit': o.depositGross.toStringAsFixed(2)})));
+    }
+    if (!o.depositPaid) return const SizedBox.shrink();
+    if (o.hasMaterialProof) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Column(children: [
+          _infoBanner(
+            icon: Icons.receipt_long_outlined,
+            color: Colors.green,
+            title: 'order_material_proof_title'.tr(),
+            text: 'order_material_proof_cr_desc'.tr(namedArgs: {
+              'amount': o.materialProofAmount.toStringAsFixed(2)})),
+          const SizedBox(height: 8),
+          Row(children: [
+            if (o.materialProofUrl != null)
+              Expanded(child: _outlineBtn(
+                label: 'order_material_proof_open'.tr(),
+                color: _kPrimary,
+                onTap: () => launchUrl(Uri.parse(o.materialProofUrl!),
+                    mode: LaunchMode.externalApplication))),
+            if (o.materialProofUrl != null) const SizedBox(width: 8),
+            Expanded(child: _outlineBtn(
+              label: 'order_material_change_btn'.tr(),
+              color: Colors.grey.shade700,
+              onTap: () => _uploadMaterialProof(o))),
+          ]),
+        ]));
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(children: [
+        _infoBanner(
+          icon: Icons.shopping_cart_outlined,
+          color: _kPrimary,
+          title: 'order_material_buy_title'.tr(),
+          text: 'order_material_buy_desc'.tr(namedArgs: {
+            'deposit': o.depositGross.toStringAsFixed(2)})),
+        const SizedBox(height: 8),
+        _primaryBtn(
+          label: 'order_material_upload_btn'.tr(),
+          icon: Icons.upload_file_rounded,
+          color: _kPrimary,
+          fullWidth: true,
+          onTap: () => _uploadMaterialProof(o)),
+      ]));
+  }
+
+  Future<void> _uploadMaterialProof(WorkOrder o) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final amountCtrl = TextEditingController(
+        text: o.hasMaterialProof ? o.materialProofAmount.toStringAsFixed(2) : '');
+    XFile? picked;
+    bool busy = false;
+    String? err;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        Future<void> pick(ImageSource src) async {
+          try {
+            final f = await ImagePicker().pickImage(
+                source: src, maxWidth: 2000, imageQuality: 85);
+            if (f != null) setS(() => picked = f);
+          } catch (e) {
+            setS(() => err = '$e');
+          }
+        }
+
+        Future<void> send() async {
+          final amt = double.tryParse(
+              amountCtrl.text.trim().replaceAll(',', '.'));
+          if (amt == null || amt <= 0) {
+            setS(() => err = 'order_material_amount_err'.tr());
+            return;
+          }
+          if (picked == null && !o.hasMaterialProof) {
+            setS(() => err = 'order_material_photo_err'.tr());
+            return;
+          }
+          setS(() { busy = true; err = null; });
+          try {
+            String url = o.materialProofUrl ?? '';
+            if (picked != null) {
+              final ref = FirebaseStorage.instance.ref(
+                  'material_proofs/$uid/${o.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+              await ref.putFile(File(picked!.path),
+                  SettableMetadata(contentType: 'image/jpeg'));
+              url = await ref.getDownloadURL();
+            }
+            await WorkOrderService.submitMaterialProof(
+                orderId: o.id, amount: amt, receiptUrl: url);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('order_material_saved'.tr()),
+                backgroundColor: Colors.green));
+          } catch (e) {
+            setS(() { busy = false; err = '${'error'.tr()}: $e'; });
+          }
+        }
+
+        return Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Text('order_material_upload_title'.tr(),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('order_material_upload_desc'.tr(namedArgs: {
+                    'deposit': o.depositGross.toStringAsFixed(2)}),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'order_material_amount_label'.tr(),
+                  suffixText: '€',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: OutlinedButton.icon(
+                  onPressed: busy ? null : () => pick(ImageSource.camera),
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: Text('order_material_camera'.tr()))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(
+                  onPressed: busy ? null : () => pick(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text('order_material_gallery'.tr()))),
+              ]),
+              if (picked != null) ...[
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(File(picked!.path), height: 120,
+                      width: double.infinity, fit: BoxFit.cover)),
+              ],
+              if (err != null) ...[
+                const SizedBox(height: 8),
+                Text(err!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: busy ? null : send,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kPrimary, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                child: busy
+                    ? const SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text('order_material_send_btn'.tr()))),
+            ])));
+      }));
+    amountCtrl.dispose();
+  }
+
   // ── Pevná cena: box s cenou, zálohou a odmenou ─────────────────────────────
   Widget _fixedPriceBox(WorkOrder o) {
     final depStatus = switch (o.depositStatus) {
@@ -691,6 +885,8 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
       'paid' => 'order_deposit_paid'.tr(),
       'refunded' => 'order_deposit_refunded'.tr(),
       'kept' => 'order_deposit_kept'.tr(),
+      'partially_kept' => 'order_deposit_partial_short'.tr(namedArgs: {
+        'kept': o.depositKeptAmount.toStringAsFixed(2)}),
       'refund_pending_decision' => 'order_deposit_decide'.tr(),
       _ => null,
     };
@@ -874,6 +1070,9 @@ class _CraftsmanWorkOrdersScreenState extends State<CraftsmanWorkOrdersScreen>
     final text = switch (o.depositStatus) {
       'refunded' => 'order_deposit_refunded_info'.tr(),
       'kept' => 'order_deposit_kept_info'.tr(),
+      'partially_kept' => 'order_deposit_partial_info'.tr(namedArgs: {
+        'kept': o.depositKeptAmount.toStringAsFixed(2),
+        'refund': o.depositRefundAmount.toStringAsFixed(2)}),
       'refund_failed' => 'order_deposit_failed_info'.tr(),
       _ => null,
     };

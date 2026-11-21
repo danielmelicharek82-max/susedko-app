@@ -11,6 +11,10 @@ import '../../utils/pricing.dart';
 import '../../services/service_request_service.dart';
 import '../auth/billing_profile_screen.dart';
 import 'craftsman_calendar_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../models/inspection.dart';
+import '../../services/inspection_service.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -352,6 +356,205 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
     }
   }
 
+  // ── Obhliadka (dopyt s quoteBasis == 'inspection') ─────────────────────────
+  Future<void> _expressInspectionInterest(ServiceRequest r) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (!await BillingProfileScreen.ensureReady(context, 'craftsman')) return;
+    if (!mounted) return;
+    final fee = await InspectionService.fee();
+    if (!mounted) return;
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('inspection_interest_title'.tr()),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('inspection_interest_body'.tr(
+              namedArgs: {'fee': fee.toStringAsFixed(0)}),
+              style: const TextStyle(fontSize: 13, height: 1.4)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl, maxLines: 2, maxLength: 200,
+            decoration: InputDecoration(
+                labelText: 'inspection_proposed_dates'.tr(),
+                hintText: 'inspection_proposed_dates_hint'.tr())),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: Text('cancel'.tr())),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text('inspection_interest_send'.tr())),
+        ]));
+    if (ok != true || !mounted) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('craftsmen').doc(user.uid).get();
+      final name = (doc.data()?['name'] as String?) ?? user.email ?? '';
+      await InspectionService.expressInspectionInterest(
+          requestId: r.id, craftsmanId: user.uid,
+          craftsmanName: name, proposedDates: ctrl.text);
+      await ServiceRequestService.expressInterest(
+          requestId: r.id, craftsmanId: user.uid, craftsmanName: name,
+          message: ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('inspection_interest_sent'.tr()),
+          backgroundColor: Colors.green));
+      await _maybeAskToSetCalendar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _withdrawInspectionInterest(ServiceRequest r) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await InspectionService.withdrawInspectionInterest(r.id, uid);
+      await ServiceRequestService.withdrawInterest(
+          requestId: r.id, craftsmanId: uid);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _scheduleInspection(Inspection ins) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+        context: context, initialDate: now.add(const Duration(days: 1)),
+        firstDate: now, lastDate: now.add(const Duration(days: 60)));
+    if (d == null || !mounted) return;
+    final t = await showTimePicker(
+        context: context, initialTime: const TimeOfDay(hour: 10, minute: 0));
+    if (t == null) return;
+    try {
+      await InspectionService.schedule(
+          ins.id, DateTime(d.year, d.month, d.day, t.hour, t.minute));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _callInspection(Future<dynamic> Function() fn) async {
+    try {
+      await fn();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${'error'.tr()}: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Widget _insBox(Color c, IconData icon, String text, List<Widget> actions) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: c.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withOpacity(0.3))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 16, color: c),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text,
+                style: const TextStyle(fontSize: 12.5, height: 1.4))),
+          ]),
+          if (actions.isNotEmpty) ...[const SizedBox(height: 8), ...actions],
+        ]));
+
+  Widget _buildInspectionAction(ServiceRequest r, String? customerReply) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+    final fmt = DateFormat('d.M.y HH:mm');
+    return StreamBuilder<InspectionOffer?>(
+      stream: InspectionService.watchMyOffer(r.id, uid),
+      builder: (ctx, offerSnap) => StreamBuilder<Inspection?>(
+        stream: InspectionService.watch(InspectionService.idOf(r.id, uid)),
+        builder: (ctx2, insSnap) {
+          final offer = offerSnap.data;
+          final ins = insSnap.data;
+          final active = ins != null && ins.status != 'awaiting_payment' &&
+              ins.status != 'refunded';
+
+          if (!active) {
+            if (offer == null) {
+              return GestureDetector(
+                onTap: () => _expressInspectionInterest(r),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [_kDeep, _kPrimary]),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.home_repair_service_outlined,
+                        size: 16, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Flexible(child: Text('inspection_interest_btn'.tr(),
+                        style: const TextStyle(color: Colors.white,
+                            fontWeight: FontWeight.bold, fontSize: 13))),
+                  ])));
+            }
+            return _insBox(Colors.green, Icons.check_circle_outline,
+                ins?.status == 'refunded'
+                    ? 'inspection_craftsman_refunded'.tr()
+                    : 'inspection_interest_waiting'.tr(),
+                [OutlinedButton(
+                    onPressed: () => _withdrawInspectionInterest(r),
+                    child: Text('inspection_interest_withdraw'.tr()))]);
+          }
+
+          final i = ins!;
+          switch (i.status) {
+            case 'paid':
+              return _insBox(_kPrimary, Icons.event_available_outlined,
+                  i.visitAt == null
+                      ? 'inspection_craftsman_paid'.tr()
+                      : '${'inspection_visit_at'.tr()}: ${fmt.format(i.visitAt!)}',
+                  [
+                    OutlinedButton.icon(
+                        onPressed: () => _scheduleInspection(i),
+                        icon: const Icon(Icons.event, size: 16),
+                        label: Text('inspection_set_date'.tr())),
+                    const SizedBox(height: 6),
+                    ElevatedButton.icon(
+                        onPressed: () => _callInspection(
+                            () => InspectionService.markDone(i.id)),
+                        icon: const Icon(Icons.done_all, size: 16),
+                        label: Text('inspection_mark_done'.tr())),
+                    TextButton(
+                        onPressed: () => _callInspection(
+                            () => InspectionService.cancel(i.id)),
+                        child: Text('inspection_craftsman_cancel'.tr())),
+                  ]);
+            case 'visited':
+              return _insBox(Colors.orange, Icons.hourglass_top,
+                  'inspection_craftsman_visited'.tr(), const []);
+            case 'confirmed':
+              if (i.lateCancelled) {
+                return _insBox(Colors.grey, Icons.info_outline,
+                    'inspection_craftsman_late_cancel'.tr(), const []);
+              }
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _insBox(Colors.green, Icons.check_circle_outline,
+                    '${'inspection_craftsman_confirmed'.tr()}${i.quoteDueAt != null ? ' (${DateFormat('d.M.y').format(i.quoteDueAt!)})' : ''}',
+                    const []),
+                const SizedBox(height: 8),
+                StreamBuilder<Quote?>(
+                  stream: ServiceRequestService.watchMyQuote(r.id, uid),
+                  builder: (c3, qs) =>
+                      _buildQuoteAction(r, qs.data != null, customerReply)),
+              ]);
+            case 'quote_accepted':
+              return _insBox(Colors.green, Icons.check_circle_outline,
+                  'inspection_craftsman_accepted'.tr(), const []);
+          }
+          return const SizedBox.shrink();
+        }));
+  }
+
   String _eur(double v) => '${v.toStringAsFixed(2)} €';
 
   Widget _buildQuoteAction(
@@ -691,6 +894,30 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                   })),
             _row(Icons.schedule_outlined, _timeframeLabel(r.timeframe)),
             if (r.quoteRequired)
+              _row(r.quoteByInspection
+                      ? Icons.home_repair_service_outlined
+                      : Icons.attach_file,
+                  r.quoteByInspection
+                      ? 'inspection_chip_visit'.tr()
+                      : 'inspection_chip_docs'.tr()),
+            if (!r.quoteRequired)
+              _row(Icons.schedule_outlined,
+                  r.estimatedScope == null
+                      ? 'inspection_chip_hourly'.tr()
+                      : '${'inspection_chip_hourly'.tr()} · ${'scope_${r.estimatedScope}'.tr()}'),
+            if (r.documentUrls.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (final d in r.documentUrls)
+                    ActionChip(
+                      avatar: const Icon(Icons.description_outlined, size: 16),
+                      label: Text(d['name'] ?? 'document',
+                          overflow: TextOverflow.ellipsis),
+                      onPressed: () => launchUrl(Uri.parse(d['url'] ?? ''),
+                          mode: LaunchMode.externalApplication)),
+                ])),
+            if (r.quoteRequired)
               _row(Icons.request_quote_outlined,
                   r.quoteDeadline == null
                       ? 'quote_required_chip'.tr()
@@ -749,7 +976,9 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
                 ])),
               const SizedBox(height: 8),
               // Tlačidlo záujmu
-              r.quoteRequired
+              r.quoteByInspection
+                  ? _buildInspectionAction(r, customerReply)
+                  : r.quoteRequired
                   ? _buildQuoteAction(r, alreadyInterested, customerReply)
                   : alreadyInterested
                   ? Column(children: [
@@ -868,6 +1097,8 @@ class _OpenRequestsScreenState extends State<OpenRequestsScreen> {
       '1_3_days':   'timeframe_1_3_days',
       '1_2_weeks':  'timeframe_1_2_weeks',
       '1_3_months': 'timeframe_1_3_months',
+      '3_6_months': 'timeframe_3_6_months',
+      'over_6_months': 'timeframe_over_6_months',
       'no_rush':    'timeframe_no_rush',
     };
     final key = map[tf];

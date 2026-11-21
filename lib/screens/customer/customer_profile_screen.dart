@@ -11,6 +11,7 @@ import 'dart:io';
 
 import '../login_screen.dart';
 import 'about_app_screen.dart';
+import 'request_history_screen.dart';
 import '../auth/craftsman_register_form.dart'; // kAllProfessionKeys, kProfessionIcons
 
 const _kPrimary = Color(0xFF2563EB);
@@ -375,6 +376,36 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             style: const TextStyle(color: Colors.white,
                                 fontWeight: FontWeight.bold, fontSize: 15)),
                       ]))),
+            const SizedBox(height: 12),
+
+            // ── História dopytov ─────────────────────────────────────────────
+            GestureDetector(
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(
+                      builder: (_) => const RequestHistoryScreen())),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200)),
+                child: Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _kPrimary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.history_rounded,
+                        size: 18, color: _kPrimary)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('requestHistoryTitle'.tr(),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF1E293B)))),
+                  Icon(Icons.chevron_right,
+                      color: Colors.grey.shade400, size: 18),
+                ])),
+            ),
             const SizedBox(height: 12),
 
             // ── Fakturačné údaje ─────────────────────────────────────────────

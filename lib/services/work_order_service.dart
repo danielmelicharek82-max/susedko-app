@@ -155,6 +155,25 @@ class WorkOrderService {
     }
   }
 
+  // ── DOKLAD O NÁKUPE MATERIÁLU (pevná cena) ───────────────────────────────
+  // Remeselník nahrá fotku/PDF dokladu do Storage a zapíše ho cez callable
+  // (suma sa pri zrušení zákazníkom ponechá remeselníkovi, max. výška zálohy).
+  static Future<void> submitMaterialProof({
+    required String orderId,
+    required double amount,
+    required String receiptUrl,
+  }) async {
+    try {
+      await _functions.httpsCallable('submitMaterialProof').call(<String, dynamic>{
+        'orderId': orderId,
+        'amount': amount,
+        'receiptUrl': receiptUrl,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? 'Nepodarilo sa uložiť doklad');
+    }
+  }
+
   // ── START WORK ────────────────────────────────────────────────────────────
   static Future<void> startWork(String id) async {
     await _db.collection(_col).doc(id).update({

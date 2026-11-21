@@ -44,6 +44,9 @@ class ServiceRequestService {
     required String timeframe,
     bool quoteRequired = false,
     DateTime? quoteDeadline,
+    String quoteBasis = 'documents',
+    List<Map<String, String>> documentUrls = const [],
+    String? estimatedScope,
   }) async {
     assert(professions.isNotEmpty && professions.length <= 3,
         'professions must contain between 1 and 3 items');
@@ -62,6 +65,9 @@ class ServiceRequestService {
       'quoteRequired': quoteRequired,
       'quoteDeadline': quoteDeadline != null
           ? Timestamp.fromDate(quoteDeadline) : null,
+      'quoteBasis': quoteRequired ? quoteBasis : null,
+      'documentUrls': documentUrls,
+      'estimatedScope': quoteRequired ? null : estimatedScope,
     });
   }
 

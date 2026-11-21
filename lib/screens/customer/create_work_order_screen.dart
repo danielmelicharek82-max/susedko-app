@@ -14,6 +14,7 @@ import '../auth/craftsman_register_form.dart'; // kProfessionIcons
 import '../auth/billing_profile_screen.dart';
 import '../customer/service_request_screen.dart'; // kProfessionCategories
 import '../../utils/pricing.dart';
+import 'work_order_payment_screen.dart';
 
 const _kPrimary = Color(0xFF2563EB);
 const _kDeep    = Color(0xFF1E40AF);
@@ -216,15 +217,38 @@ class _CreateWorkOrderScreenState
         createdAt:        DateTime.now(),
       );
 
-      await WorkOrderService.create(order,
+      final newOrderId = await WorkOrderService.create(order,
           fromQuote: _isQuote,
           expectedNet: _isQuote ? widget.quote!.customerNet : null);
 
+      // Pevná cena so zálohou na materiál: zákazník ju platí hneď po prijatí
+      // ponuky (pri termíne ďalej ako 14 dní až 14 dní pred ním — vtedy dostane
+      // pripomienku a zaplatí ju v zákazke).
+      WorkOrder? depositOrder;
+      if (_isQuote) {
+        try {
+          final snap = await FirebaseFirestore.instance
+              .collection('work_orders').doc(newOrderId).get();
+          if (snap.exists) {
+            final o = WorkOrder.fromFirestore(snap);
+            if (o.depositDue && o.depositPayableNow) depositOrder = o;
+          }
+        } catch (_) {/* zálohu zaplatí zákazník v zákazke */}
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('createWorkOrder_success'.tr()),
+            content: Text(depositOrder != null
+                ? 'order_created_pay_deposit'.tr()
+                : 'createWorkOrder_success'.tr()),
             backgroundColor: Colors.green));
-        Navigator.pop(context, true);
+        if (depositOrder != null) {
+          final o = depositOrder;
+          Navigator.pushReplacement(context, MaterialPageRoute(
+              builder: (_) => WorkOrderPaymentScreen(order: o)), result: true);
+        } else {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       final msg = e.toString();

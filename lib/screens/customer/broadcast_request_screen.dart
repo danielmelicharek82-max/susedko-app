@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../services/inspection_service.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
@@ -48,6 +50,14 @@ class _BroadcastRequestScreenState
   String _selectedTimeframe = '1_3_months';
   bool _quoteRequired = false;
   DateTime? _quoteDeadline;
+  // Podklad pre ponuku: 'documents' (priložené podklady) alebo 'inspection'.
+  String _quoteBasis = 'documents';
+  String? _estimatedScope;
+  final List<PlatformFile>        _newDocs      = [];
+  final List<Map<String, String>> _existingDocs = [];
+  double _inspectionFee = InspectionService.defaultFee;
+  static const int _kMaxDocs = 5;
+  static const int _kMaxDocBytes = 10 * 1024 * 1024;
 
   final List<File>   _newPhotos    = [];
   final List<String> _existingUrls = [];
@@ -59,6 +69,9 @@ class _BroadcastRequestScreenState
   @override
   void initState() {
     super.initState();
+    InspectionService.fee().then((f) {
+      if (mounted) setState(() => _inspectionFee = f);
+    });
     final r = widget.existingRequest;
     if (r != null) {
       final existing = r.professions.isNotEmpty
@@ -79,6 +92,9 @@ class _BroadcastRequestScreenState
       _selectedTimeframe      = r.timeframe;
       _quoteRequired          = r.quoteRequired;
       _quoteDeadline          = r.quoteDeadline;
+      _quoteBasis             = r.quoteBasis;
+      _estimatedScope         = r.estimatedScope;
+      _existingDocs.addAll(r.documentUrls);
       _descController.text    = r.description;
       _budgetController.text  = r.budget?.toStringAsFixed(0) ?? '';
       _addressController.text = r.address ?? '';
@@ -88,6 +104,49 @@ class _BroadcastRequestScreenState
       _selectedCategory =
           kProfessionCategories[_primaryProfession]!.first;
     }
+  }
+
+  Future<void> _pickDocs() async {
+    final left = _kMaxDocs - _newDocs.length - _existingDocs.length;
+    if (left <= 0) {
+      _snack('inspection_docs_max'.tr(namedArgs: {'max': '$_kMaxDocs'}));
+      return;
+    }
+    final res = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+    );
+    if (res == null) return;
+    var tooBig = false;
+    setState(() {
+      for (final f in res.files.take(left)) {
+        if (f.path == null) continue;
+        if (f.size > _kMaxDocBytes) { tooBig = true; continue; }
+        _newDocs.add(f);
+      }
+    });
+    if (tooBig) _snack('inspection_docs_toobig'.tr());
+  }
+
+  void _snack(String msg, {Color color = Colors.orange}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: color));
+  }
+
+  Future<List<Map<String, String>>> _uploadNewDocs() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return [];
+    final out = <Map<String, String>>[];
+    for (final f in _newDocs) {
+      final safe = f.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final ref = FirebaseStorage.instance.ref().child(
+          'service_requests/${user.uid}/${DateTime.now().millisecondsSinceEpoch}_$safe');
+      await ref.putFile(File(f.path!));
+      out.add({'url': await ref.getDownloadURL(), 'name': f.name});
+    }
+    return out;
   }
 
   @override
@@ -192,13 +251,23 @@ class _BroadcastRequestScreenState
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    // Cenová ponuka: buď podklady (aspoň 1 súbor/fotka), alebo obhliadka.
+    if (_quoteRequired && _quoteBasis == 'documents' &&
+        _totalPhotos + _newDocs.length + _existingDocs.length == 0) {
+      _snack('inspection_docs_required'.tr());
+      return;
+    }
+
     setState(() => _submitting = true);
     try {
       setState(() => _uploadingImages = true);
       final newUrls = await _uploadNewPhotos();
+      final newDocUrls = await _uploadNewDocs();
       setState(() => _uploadingImages = false);
 
       final allPhotoUrls = [..._existingUrls, ...newUrls];
+      final allDocs = _quoteRequired && _quoteBasis == 'documents'
+          ? [..._existingDocs, ...newDocUrls] : <Map<String, String>>[];
       final addressText  = _addressController.text.trim();
 
       GeoPoint? geoPoint;
@@ -236,6 +305,9 @@ class _BroadcastRequestScreenState
           timeframe:   _selectedTimeframe,
           quoteRequired: _quoteRequired,
           quoteDeadline: _quoteRequired ? _quoteDeadline : null,
+          quoteBasis: _quoteBasis,
+          documentUrls: allDocs,
+          estimatedScope: _estimatedScope,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -260,6 +332,9 @@ class _BroadcastRequestScreenState
           timeframe:     _selectedTimeframe,
           quoteRequired: _quoteRequired,
           quoteDeadline: _quoteRequired ? _quoteDeadline : null,
+          quoteBasis:    _quoteBasis,
+          documentUrls:  allDocs,
+          estimatedScope: _quoteRequired ? null : _estimatedScope,
           status:        ServiceRequestStatus.open,
           type:          ServiceRequestType.broadcast,
           createdAt:     DateTime.now(),
@@ -280,6 +355,85 @@ class _BroadcastRequestScreenState
       if (mounted) setState(() => _submitting = false);
     }
   }
+
+  Widget _choiceCard({
+    required bool selected,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? _kBg : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: selected ? _kPrimary : Colors.grey.shade300,
+                width: selected ? 2 : 1)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 22, color: selected ? _kPrimary : Colors.grey),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(
+                  fontSize: 14.5, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 3),
+              Text(subtitle, style: TextStyle(
+                  fontSize: 12.5, color: Colors.grey.shade600, height: 1.4)),
+            ])),
+            Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                size: 20, color: selected ? _kPrimary : Colors.grey),
+          ])));
+
+  Widget _basisOption({
+    required String value,
+    required String title,
+    required String subtitle,
+  }) {
+    final sel = _quoteBasis == value;
+    return GestureDetector(
+      onTap: () => setState(() => _quoteBasis = value),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: sel ? _kBg : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: sel ? _kPrimary : Colors.grey.shade300,
+              width: sel ? 2 : 1)),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(sel ? Icons.radio_button_checked : Icons.radio_button_off,
+              size: 20, color: sel ? _kPrimary : Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(
+                fontSize: 13.5, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(subtitle, style: TextStyle(
+                fontSize: 12, color: Colors.grey.shade600, height: 1.35)),
+          ])),
+        ])));
+  }
+
+  Widget _docTile(String name, VoidCallback onRemove) => Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+            color: _kBg, borderRadius: BorderRadius.circular(10)),
+        child: Row(children: [
+          const Icon(Icons.description_outlined, size: 18, color: _kPrimary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13))),
+          IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: onRemove),
+        ]));
 
   int get _totalPhotos => _existingUrls.length + _newPhotos.length;
 
@@ -529,63 +683,52 @@ class _BroadcastRequestScreenState
                 icon: Icons.location_on_outlined),
               const SizedBox(height: 20),
 
-              // ── Budget ─────────────────────────────────────────────
-              _sectionTitle('broadcastRequest_budget'.tr(),
-                  Icons.euro_outlined),
+              // ── Spôsob platby ───────────────────────────────────────
+              _sectionTitle('pay_title'.tr(), Icons.payments_outlined),
               const SizedBox(height: 10),
-              _inputField(
-                controller: _budgetController,
-                hint: 'requestBudgetHint'.tr(),
-                icon: Icons.euro_outlined,
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v != null &&
-                      v.isNotEmpty &&
-                      double.tryParse(v) == null) {
-                    return 'broadcastRequest_budget_error'.tr();
-                  }
-                  return null;
-                }),
-              const SizedBox(height: 20),
-
-              // ── Cenové ponuky ──────────────────────────────────────
+              _choiceCard(
+                selected: _quoteRequired,
+                title: 'pay_quote'.tr(),
+                subtitle: 'pay_quote_desc'.tr(),
+                icon: Icons.request_quote_outlined,
+                onTap: () => setState(() => _quoteRequired = true)),
+              const SizedBox(height: 8),
+              _choiceCard(
+                selected: !_quoteRequired,
+                title: 'pay_hourly'.tr(),
+                subtitle: 'pay_hourly_desc'.tr(),
+                icon: Icons.schedule_outlined,
+                onTap: () => setState(() => _quoteRequired = false)),
+              const SizedBox(height: 12),
+              if (!_quoteRequired) ...[
+                Text('scope_title'.tr(), style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B))),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final k in const ['under2h', 'half_day', 'full_day',
+                      'multi_day', 'unknown'])
+                    ChoiceChip(
+                      label: Text('scope_$k'.tr()),
+                      selected: _estimatedScope == k,
+                      selectedColor: _kPrimary.withOpacity(0.15),
+                      onSelected: (v) =>
+                          setState(() => _estimatedScope = v ? k : null)),
+                ]),
+              ],
+              if (_quoteRequired)
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: _quoteRequired
-                          ? _kPrimary.withOpacity(0.4)
-                          : Colors.grey.shade200),
+                  border: Border.all(color: _kPrimary.withOpacity(0.4)),
                   boxShadow: [BoxShadow(
                       color: Colors.black.withOpacity(0.03),
                       blurRadius: 8)]),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: _kPrimary.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.request_quote_outlined,
-                          size: 15, color: _kPrimary)),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('quote_request_title'.tr(),
-                        style: const TextStyle(fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B)))),
-                    Switch(
-                      value: _quoteRequired,
-                      activeColor: _kPrimary,
-                      onChanged: (v) => setState(() => _quoteRequired = v)),
-                  ]),
-                  const SizedBox(height: 4),
-                  Text('quote_request_desc'.tr(),
-                      style: TextStyle(fontSize: 12,
-                          color: Colors.grey.shade500, height: 1.4)),
                   if (_quoteRequired) ...[
                     const SizedBox(height: 10),
                     Row(children: [
@@ -617,6 +760,39 @@ class _BroadcastRequestScreenState
                           onPressed: () =>
                               setState(() => _quoteDeadline = null)),
                     ]),
+                    const SizedBox(height: 14),
+                    Text('inspection_basis_title'.tr(),
+                        style: const TextStyle(fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B))),
+                    const SizedBox(height: 8),
+                    _basisOption(
+                      value: 'documents',
+                      title: 'inspection_basis_docs'.tr(),
+                      subtitle: 'inspection_basis_docs_desc'.tr()),
+                    const SizedBox(height: 8),
+                    _basisOption(
+                      value: 'inspection',
+                      title: 'inspection_basis_visit'.tr(),
+                      subtitle: 'inspection_basis_visit_desc'.tr(namedArgs:
+                          {'fee': _inspectionFee.toStringAsFixed(0)})),
+                    if (_quoteBasis == 'documents') ...[
+                      const SizedBox(height: 10),
+                      Text('inspection_docs_hint'.tr(),
+                          style: TextStyle(fontSize: 12,
+                              color: Colors.grey.shade600, height: 1.4)),
+                      const SizedBox(height: 6),
+                      for (final d in _existingDocs)
+                        _docTile(d['name'] ?? 'document',
+                            () => setState(() => _existingDocs.remove(d))),
+                      for (final f in _newDocs)
+                        _docTile(f.name,
+                            () => setState(() => _newDocs.remove(f))),
+                      OutlinedButton.icon(
+                        onPressed: _pickDocs,
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: Text('inspection_docs_add'.tr())),
+                    ],
                   ],
                 ])),
               const SizedBox(height: 20),
@@ -655,6 +831,12 @@ class _BroadcastRequestScreenState
                           value: '1_3_months',
                           child: Text(
                               'broadcastRequest_timeframe_3months'.tr())),
+                      DropdownMenuItem(
+                          value: '3_6_months',
+                          child: Text('timeframe_3_6_months'.tr())),
+                      DropdownMenuItem(
+                          value: 'over_6_months',
+                          child: Text('timeframe_over_6_months'.tr())),
                       DropdownMenuItem(
                           value: 'no_rush',
                           child: Text(
